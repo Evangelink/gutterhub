@@ -23,6 +23,11 @@ export interface GitHubActionsSource {
 
 export interface ManualSource {
   kind: 'manual';
+  /**
+   * Distinguishes several hand-uploaded reports for one repository, so that a coverage
+   * report and a mutation report can be held at the same time without colliding.
+   */
+  slot?: string;
 }
 
 export type CoverageSource = UrlTemplateSource | GitHubActionsSource | ManualSource;
@@ -31,8 +36,19 @@ export interface RepositoryConfig {
   /** `owner/repo`, lower-cased. */
   key: string;
   enabled: boolean;
-  source: CoverageSource;
+  /**
+   * Reports to overlay, drawn as separate channels in the gutter. More than one is the
+   * interesting case: coverage and mutation testing disagreeing on a line is precisely
+   * the code that looks tested and is not.
+   */
+  sources: CoverageSource[];
   paths: PathMatchOptions;
+}
+
+/** Shape of a config written before multiple sources were supported. */
+interface LegacyRepositoryConfig extends Omit<RepositoryConfig, 'sources'> {
+  source?: CoverageSource;
+  sources?: CoverageSource[];
 }
 
 export interface GlobalSettings {
@@ -66,21 +82,43 @@ export const DEFAULT_SOURCE: CoverageSource = {
 const STORAGE_KEY = 'gutterhub:settings';
 
 function storageArea(): chrome.storage.StorageArea {
-  // `sync` is capped at ~100KB and 8KB per item; coverage configuration is small, but
-  // fall back to `local` when sync is unavailable (Firefox without a signed-in account).
+  // `sync` is capped at ~100KB and 8KB per item; configuration is small, but fall back
+  // to `local` when sync is unavailable (Firefox without a signed-in account).
   return chrome.storage.sync ?? chrome.storage.local;
+}
+
+/**
+ * Reads a stored repository config, upgrading the single-`source` shape written before
+ * multiple reports were supported. Migrating on read rather than with a one-off rewrite
+ * means a profile synced from an older install keeps working without a migration step
+ * that has to be remembered forever.
+ */
+export function normaliseRepositoryConfig(stored: LegacyRepositoryConfig): RepositoryConfig {
+  const sources = stored.sources ?? (stored.source ? [stored.source] : []);
+
+  return {
+    key: stored.key,
+    enabled: stored.enabled,
+    sources: sources.length > 0 ? sources : [DEFAULT_SOURCE],
+    paths: stored.paths ?? {},
+  };
 }
 
 export async function loadSettings(): Promise<GlobalSettings> {
   const stored = await storageArea().get(STORAGE_KEY);
   const value = stored[STORAGE_KEY] as Partial<GlobalSettings> | undefined;
 
+  const repositories: Record<string, RepositoryConfig> = {};
+  for (const [key, config] of Object.entries(value?.repositories ?? {})) {
+    repositories[key] = normaliseRepositoryConfig(config as unknown as LegacyRepositoryConfig);
+  }
+
   return {
     ...DEFAULT_SETTINGS,
     ...value,
     // Spread does not deep-merge, and a partially written record would otherwise
     // replace the defaults wholesale.
-    repositories: { ...(value?.repositories ?? {}) },
+    repositories,
     enterpriseHosts: value?.enterpriseHosts ?? [],
   };
 }

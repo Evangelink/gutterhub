@@ -1,18 +1,28 @@
-import type { AnalysedFile, FileSummary, ReportKind } from '../core/analysis.js';
+import {
+  PRESENTATION,
+  type AnalysedFile,
+  type FileSummary,
+  type ReportKind,
+} from '../core/analysis.js';
 import { parseAnalysis } from '../core/parse.js';
 import { PathIndex } from '../core/pathMatch.js';
 import { collectFileBlocks } from '../github/adapters/index.js';
 import { parseLocation, repositoryKey, samePage, type PageContext } from '../github/location.js';
-import { addStats, clearBlock, emptyStats, renderBlock } from '../github/render.js';
+import { addStats, clearBlock, emptyStats, renderBlock, type MarkLayer } from '../github/render.js';
 import { isMessage, type OverlayStatus, type ResolveCoverageResponse } from '../shared/messages.js';
 import { loadSettings, repositoryConfig, type GlobalSettings } from '../shared/settings.js';
 
 const RENDER_DEBOUNCE_MS = 120;
 
-interface LoadedAnalysis {
+interface LoadedReport {
   kind: ReportKind;
   index: PathIndex<AnalysedFile>;
   label: string;
+}
+
+interface LoadedAnalysis {
+  reports: LoadedReport[];
+  warnings: string[];
   sha: string;
 }
 
@@ -43,8 +53,8 @@ function badgeLevel(percent: number): 'good' | 'fair' | 'poor' {
   return percent >= 50 ? 'fair' : 'poor';
 }
 
-/** Adds a per-file headline figure next to the file name in a diff header. */
-function renderBadge(root: HTMLElement, summary: FileSummary | null): void {
+/** Adds per-file headline figures next to the file name in a diff header. */
+function renderBadge(root: HTMLElement, summaries: FileSummary[]): void {
   const header = root.querySelector<HTMLElement>(
     '.file-info, .file-header, [data-testid="file-header"]',
   );
@@ -52,17 +62,23 @@ function renderBadge(root: HTMLElement, summary: FileSummary | null): void {
     return;
   }
 
+  const usable = summaries.filter((summary) => summary.percent !== null);
   const existing = header.querySelector<HTMLElement>('.gutterhub-badge');
-  if (summary === null || summary.percent === null) {
+
+  if (usable.length === 0) {
     existing?.remove();
     return;
   }
 
   const badge = existing ?? document.createElement('span');
   badge.className = 'gutterhub-badge';
-  badge.dataset['level'] = badgeLevel(summary.percent);
-  badge.textContent = `${summary.percent.toFixed(0)}% ${summary.label}`;
-  badge.title = 'Whole-file figure for this report, from GutterHub';
+  // The lowest figure drives the colour, so a healthy coverage number cannot mask a
+  // poor mutation score sitting right beside it.
+  badge.dataset['level'] = badgeLevel(Math.min(...usable.map((summary) => summary.percent!)));
+  badge.textContent = usable
+    .map((summary) => `${summary.percent!.toFixed(0)}% ${summary.label}`)
+    .join(' · ');
+  badge.title = 'Whole-file figures for the loaded reports, from GutterHub';
 
   if (!existing) {
     header.appendChild(badge);
@@ -90,31 +106,44 @@ function render(): void {
       continue;
     }
 
-    const file = loaded.index.lookup(block.path);
-    if (!file) {
+    const layers: MarkLayer[] = [];
+    const summaries: FileSummary[] = [];
+
+    for (const report of loaded.reports) {
+      const file = report.index.lookup(block.path);
+      if (!file) {
+        continue;
+      }
+      layers.push({ title: PRESENTATION[report.kind].title, marks: file.marks(markOptions) });
+      summaries.push(file.summary());
+    }
+
+    if (layers.length === 0) {
       // Leave unmatched files completely untouched: a half-painted diff reads as
       // "this code is untested" rather than "no data for this file".
       clearBlock(block.root);
-      renderBadge(block.root, null);
+      renderBadge(block.root, []);
       continue;
     }
 
     matched++;
-    stats = addStats(stats, renderBlock(block, file.marks(markOptions), options));
+    stats = addStats(stats, renderBlock(block, layers, options));
     // The badge reports the whole file, not just the lines visible in a diff.
-    renderBadge(block.root, file.summary());
+    renderBadge(block.root, summaries);
   }
 
   setStatus({
     state: stats.annotated > 0 ? 'ready' : 'empty',
     adapterId,
-    kind: loaded.kind,
-    label: loaded.label,
+    kinds: loaded.reports.map((report) => report.kind),
+    labels: loaded.reports.map((report) => report.label),
+    warnings: loaded.warnings,
     repositoryKey: repositoryKey(currentContext),
     annotated: stats.annotated,
     good: stats.good,
     partial: stats.partial,
     bad: stats.bad,
+    conflicts: stats.conflicts,
     filesMatched: matched,
     filesTotal: blocks.length,
     ...(stats.annotated === 0
@@ -213,24 +242,38 @@ async function load(force = false): Promise<void> {
 
   const config = repositoryConfig(settings, repositoryKey(context))!;
 
-  try {
-    const analysis = parseAnalysis(response.text, response.fileName);
-    loaded = {
-      kind: analysis.kind,
-      index: new PathIndex(analysis.files, config.paths),
-      label: response.label,
-      sha: response.sha,
-    };
-  } catch (error) {
+  const reports: LoadedReport[] = [];
+  const warnings = [...response.warnings];
+
+  for (const report of response.reports) {
+    try {
+      const analysis = parseAnalysis(report.text, report.fileName);
+      reports.push({
+        kind: analysis.kind,
+        index: new PathIndex(analysis.files, config.paths),
+        label: report.label,
+      });
+    } catch (error) {
+      // One unreadable report should not discard the others.
+      warnings.push(
+        `${report.label}: ${error instanceof Error ? error.message : 'could not be parsed'}`,
+      );
+    }
+  }
+
+  if (reports.length === 0) {
     loaded = null;
     clearOverlay();
     setStatus({
       state: 'error',
       repositoryKey: repositoryKey(context),
-      message: error instanceof Error ? error.message : 'Could not parse the report.',
+      message: warnings[0] ?? 'Could not parse any of the configured reports.',
+      warnings,
     });
     return;
   }
+
+  loaded = { reports, warnings, sha: response.sha };
 
   render();
   startObserving();

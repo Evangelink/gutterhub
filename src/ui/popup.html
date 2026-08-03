@@ -31,10 +31,18 @@
       <span class="bad" id="legend-bad">uncovered</span>
     </div>
 
+    <p class="hint" id="conflicts" hidden></p>
+    <p class="hint" id="warnings" hidden></p>
+
     <section id="setup" hidden>
-      <h2>Coverage source</h2>
+      <h2>Reports</h2>
+      <p class="hint">
+        Add a second report to overlay both at once — coverage and mutation testing draw as two
+        bars, and lines where they disagree are flagged.
+      </p>
+
       <div class="field">
-        <label for="source-kind">Where the report comes from</label>
+        <label for="source-kind">First report</label>
         <select id="source-kind">
           <option value="github-actions">GitHub Actions artifact</option>
           <option value="url-template">URL</option>
@@ -70,12 +78,50 @@
       </div>
 
       <div class="field" id="field-manual" hidden>
-        <label for="manual-text">Paste an LCOV, Cobertura or Istanbul report</label>
+        <label for="manual-text">Paste an LCOV, Cobertura, Istanbul or mutation report</label>
         <textarea id="manual-text" spellcheck="false"></textarea>
         <div class="row" style="margin-top: 6px">
           <input id="manual-file" type="file" accept=".info,.xml,.json,.lcov,text/*" />
         </div>
         <p class="hint" id="manual-status"></p>
+      </div>
+
+      <div class="field">
+        <label class="inline" style="margin-bottom: 6px">
+          <input type="checkbox" id="second-enabled" />
+          Overlay a second report
+        </label>
+        <div id="second-block" hidden>
+          <label for="second-kind">Second report</label>
+          <select id="second-kind">
+            <option value="manual">Uploaded by hand</option>
+            <option value="github-actions">GitHub Actions artifact</option>
+            <option value="url-template">URL</option>
+          </select>
+
+          <div class="field" id="second-field-artifact" hidden style="margin-top: 8px">
+            <label for="second-artifact-name">Artifact name</label>
+            <input id="second-artifact-name" type="text" placeholder="mutation*" />
+          </div>
+
+          <div class="field" id="second-field-template" hidden style="margin-top: 8px">
+            <label for="second-url-template">Report URL</label>
+            <input
+              id="second-url-template"
+              type="text"
+              placeholder="https://ci.example.com/{owner}/{repo}/{sha}/mutation.json"
+            />
+          </div>
+
+          <div class="field" id="second-field-manual" style="margin-top: 8px">
+            <label for="second-manual-text">Paste the second report</label>
+            <textarea id="second-manual-text" spellcheck="false"></textarea>
+            <div class="row" style="margin-top: 6px">
+              <input id="second-manual-file" type="file" accept=".info,.xml,.json,.lcov,text/*" />
+            </div>
+            <p class="hint" id="second-manual-status"></p>
+          </div>
+        </div>
       </div>
 
       <div class="row">

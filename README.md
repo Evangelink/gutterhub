@@ -52,6 +52,25 @@ The report kind is detected from the payload, so there is nothing extra to confi
 point GutterHub at a mutation report instead of a coverage one and the overlay relabels
 itself.
 
+### Both at once
+
+You can load **two reports together**, and this is where it earns its keep. They draw as
+two bars in the gutter, and any line the two disagree about is flagged with a dotted
+underline and called out first in the tooltip:
+
+```
+⚠ Reports disagree — one rates this line good, another does not.
+Code coverage: Covered by tests · 12 hits
+Mutation testing: 0/2 mutants killed · survived: EqualityOperator
+```
+
+That is the finding neither report produces alone: a line coverage paints green whose
+mutants all survived is code you believe is tested and is not. On this repository's own
+source, overlaying its real coverage against a mutation report flags 58 such lines.
+
+The worst of the two statuses drives the primary colour, so a line one report is happy
+with and the other is not can never read as fine at a glance.
+
 ## Where the reports come from
 
 Pick one per repository:

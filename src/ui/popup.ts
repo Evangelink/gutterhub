@@ -42,6 +42,19 @@ const ui = {
   fieldEntry: element('field-entry'),
   fieldTemplate: element('field-template'),
   fieldManual: element('field-manual'),
+  conflicts: element('conflicts'),
+  warnings: element('warnings'),
+  secondEnabled: element<HTMLInputElement>('second-enabled'),
+  secondBlock: element('second-block'),
+  secondKind: element<HTMLSelectElement>('second-kind'),
+  secondArtifactName: element<HTMLInputElement>('second-artifact-name'),
+  secondUrlTemplate: element<HTMLInputElement>('second-url-template'),
+  secondManualText: element<HTMLTextAreaElement>('second-manual-text'),
+  secondManualFile: element<HTMLInputElement>('second-manual-file'),
+  secondManualStatus: element('second-manual-status'),
+  secondFieldArtifact: element('second-field-artifact'),
+  secondFieldTemplate: element('second-field-template'),
+  secondFieldManual: element('second-field-manual'),
   save: element<HTMLButtonElement>('save'),
   refresh: element<HTMLButtonElement>('refresh'),
   enabled: element<HTMLInputElement>('repo-enabled'),
@@ -63,31 +76,55 @@ const STATE_TEXT: Record<OverlayStatus['state'], string> = {
   disabled: 'Turned off.',
 };
 
+/** The slot name under which the second hand-uploaded report is stored. */
+const SECOND_SLOT = 'second';
+
 function showStatus(status: OverlayStatus): void {
   ui.dot.dataset['state'] = status.state;
   ui.message.textContent = status.message ?? STATE_TEXT[status.state];
   ui.hint.textContent = status.hint ?? '';
   ui.legend.hidden = status.state !== 'ready';
 
-  // Relabel the legend in the report's own vocabulary: green means "covered" for a
-  // coverage report but "killed" for a mutation one.
-  const presentation = PRESENTATION[status.kind ?? 'coverage'];
-  ui.legendGood.textContent = presentation.legend.good;
-  ui.legendPartial.textContent = presentation.legend.partial;
-  ui.legendBad.textContent = presentation.legend.bad;
+  const kinds = status.kinds?.length ? status.kinds : (['coverage'] as const);
+  // With one report the legend speaks that report's language; with two, the words would
+  // contradict each other, so fall back to neutral ones.
+  const legend =
+    kinds.length === 1
+      ? PRESENTATION[kinds[0]!].legend
+      : { good: 'good', partial: 'partial', bad: 'needs tests' };
+
+  ui.legendGood.textContent = legend.good;
+  ui.legendPartial.textContent = legend.partial;
+  ui.legendBad.textContent = legend.bad;
 
   if (status.state === 'ready') {
-    const parts = [
+    ui.message.textContent = [
       `${status.annotated ?? 0} lines`,
-      `${status.good ?? 0} ${presentation.legend.good}`,
-      `${status.partial ?? 0} ${presentation.legend.partial}`,
-      `${status.bad ?? 0} ${presentation.legend.bad}`,
+      `${status.good ?? 0} ${legend.good}`,
+      `${status.partial ?? 0} ${legend.partial}`,
+      `${status.bad ?? 0} ${legend.bad}`,
       `${status.filesMatched ?? 0}/${status.filesTotal ?? 0} files matched`,
-    ];
-    ui.message.textContent = parts.join(' · ');
+    ].join(' · ');
   }
 
-  ui.source.textContent = status.label ? `${presentation.title} · ${status.label}` : '';
+  const conflicts = status.conflicts ?? 0;
+  ui.conflicts.hidden = conflicts === 0;
+  if (conflicts > 0) {
+    ui.conflicts.textContent =
+      `⚠ ${conflicts} line${conflicts === 1 ? '' : 's'} where the reports disagree — ` +
+      'covered, but the tests would not notice it breaking.';
+  }
+
+  const warnings = status.warnings ?? [];
+  ui.warnings.hidden = warnings.length === 0;
+  ui.warnings.textContent = warnings.join(' · ');
+
+  const labels = status.labels ?? [];
+  ui.source.textContent = labels.length
+    ? labels
+        .map((label, index) => `${PRESENTATION[kinds[index] ?? 'coverage'].title} · ${label}`)
+        .join('\n')
+    : '';
 }
 
 function applyKind(kind: CoverageSource['kind']): void {
@@ -95,6 +132,41 @@ function applyKind(kind: CoverageSource['kind']): void {
   ui.fieldEntry.hidden = kind !== 'github-actions';
   ui.fieldTemplate.hidden = kind !== 'url-template';
   ui.fieldManual.hidden = kind !== 'manual';
+}
+
+function applySecondKind(kind: CoverageSource['kind']): void {
+  ui.secondFieldArtifact.hidden = kind !== 'github-actions';
+  ui.secondFieldTemplate.hidden = kind !== 'url-template';
+  ui.secondFieldManual.hidden = kind !== 'manual';
+}
+
+function readSecondSource(): CoverageSource {
+  switch (ui.secondKind.value) {
+    case 'url-template':
+      return { kind: 'url-template', template: ui.secondUrlTemplate.value.trim() };
+    case 'github-actions':
+      return {
+        kind: 'github-actions',
+        artifactName: ui.secondArtifactName.value.trim() || 'mutation*',
+      };
+    default:
+      return { kind: 'manual', slot: SECOND_SLOT };
+  }
+}
+
+function writeSecondSource(source: CoverageSource | undefined): void {
+  ui.secondEnabled.checked = source !== undefined;
+  ui.secondBlock.hidden = source === undefined;
+
+  const kind = source?.kind ?? 'manual';
+  ui.secondKind.value = kind;
+  applySecondKind(kind);
+
+  if (source?.kind === 'github-actions') {
+    ui.secondArtifactName.value = source.artifactName;
+  } else if (source?.kind === 'url-template') {
+    ui.secondUrlTemplate.value = source.template;
+  }
 }
 
 function readSource(): CoverageSource {
@@ -167,42 +239,84 @@ async function initialise(): Promise<void> {
   const config = repositoryConfig(settings, key);
 
   ui.enabled.checked = config?.enabled ?? true;
-  writeSource(config?.source ?? DEFAULT_SOURCE);
+  writeSource(config?.sources?.[0] ?? DEFAULT_SOURCE);
+  writeSecondSource(config?.sources?.[1]);
+
+  const describe = (report: { fileName: string; text: string; savedAt: number }) =>
+    `Currently holding ${report.fileName} (${(report.text.length / 1024).toFixed(0)} KiB), ` +
+    `saved ${new Date(report.savedAt).toLocaleString()}.`;
 
   const manual = await loadManualReport(owner, repo);
   if (manual) {
-    ui.manualStatus.textContent = `Currently holding ${manual.fileName} (${(
-      manual.text.length / 1024
-    ).toFixed(0)} KiB), saved ${new Date(manual.savedAt).toLocaleString()}.`;
+    ui.manualStatus.textContent = describe(manual);
+  }
+
+  const second = await loadManualReport(owner, repo, SECOND_SLOT);
+  if (second) {
+    ui.secondManualStatus.textContent = describe(second);
   }
 
   await refreshStatus();
 }
 
 ui.kind.addEventListener('change', () => applyKind(ui.kind.value as CoverageSource['kind']));
-
-ui.manualFile.addEventListener('change', async () => {
-  const file = ui.manualFile.files?.[0];
-  if (!file) {
-    return;
-  }
-  ui.manualText.value = await file.text();
-  ui.manualStatus.textContent = `Loaded ${file.name}. Press Save to store it.`;
-  ui.manualText.dataset['fileName'] = file.name;
+ui.secondKind.addEventListener('change', () =>
+  applySecondKind(ui.secondKind.value as CoverageSource['kind']),
+);
+ui.secondEnabled.addEventListener('change', () => {
+  ui.secondBlock.hidden = !ui.secondEnabled.checked;
 });
+
+/** Reads a picked file into a textarea, remembering the name for format detection. */
+function wireFileInput(
+  input: HTMLInputElement,
+  textarea: HTMLTextAreaElement,
+  status: HTMLElement,
+): void {
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    textarea.value = await file.text();
+    textarea.dataset['fileName'] = file.name;
+    status.textContent = `Loaded ${file.name}. Press Save to store it.`;
+  });
+}
+
+wireFileInput(ui.manualFile, ui.manualText, ui.manualStatus);
+wireFileInput(ui.secondManualFile, ui.secondManualText, ui.secondManualStatus);
 
 ui.save.addEventListener('click', async () => {
   ui.save.disabled = true;
 
   try {
-    const source = readSource();
+    const sources: CoverageSource[] = [readSource()];
 
-    if (source.kind === 'manual' && ui.manualText.value.trim().length > 0) {
+    if (sources[0]!.kind === 'manual' && ui.manualText.value.trim().length > 0) {
       await saveManualReport(owner, repo, {
         text: ui.manualText.value,
         fileName: ui.manualText.dataset['fileName'] ?? 'pasted-report',
       });
       ui.manualStatus.textContent = 'Saved.';
+    }
+
+    if (ui.secondEnabled.checked) {
+      const second = readSecondSource();
+      sources.push(second);
+
+      if (second.kind === 'manual' && ui.secondManualText.value.trim().length > 0) {
+        await saveManualReport(
+          owner,
+          repo,
+          {
+            text: ui.secondManualText.value,
+            fileName: ui.secondManualText.dataset['fileName'] ?? 'pasted-report',
+          },
+          SECOND_SLOT,
+        );
+        ui.secondManualStatus.textContent = 'Saved.';
+      }
     }
 
     const settings = await loadSettings();
@@ -212,7 +326,7 @@ ui.save.addEventListener('click', async () => {
     const config: RepositoryConfig = {
       key,
       enabled: ui.enabled.checked,
-      source,
+      sources,
       paths: existing?.paths ?? {},
     };
 

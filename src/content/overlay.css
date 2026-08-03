@@ -9,19 +9,67 @@
 
 .gutterhub-gutter {
   position: relative;
-  box-shadow: inset 4px 0 0 0 var(--gutterhub-color, transparent);
+  /*
+   * Channels are stacked inset shadows rather than extra elements: the first listed
+   * paints on top, so a 3px channel over a 6px one reads as two adjacent bars while
+   * still costing no layout. A single report keeps the full 4px width.
+   */
+  box-shadow:
+    inset var(--gutterhub-w1, 4px) 0 0 0 var(--gutterhub-c1, transparent),
+    inset var(--gutterhub-w2, 0) 0 0 0 var(--gutterhub-c2, transparent);
 }
 
-.gutterhub-gutter.gutterhub-good {
-  --gutterhub-color: var(--fgColor-success, var(--color-success-fg, #1a7f37));
+.gutterhub-gutter.gutterhub-dual {
+  --gutterhub-w1: 3px;
+  --gutterhub-w2: 7px;
 }
 
-.gutterhub-gutter.gutterhub-bad {
-  --gutterhub-color: var(--fgColor-danger, var(--color-danger-fg, #cf222e));
+/* Channel 1 — the first configured report. */
+.gutterhub-gutter.gutterhub-l1-good {
+  --gutterhub-c1: var(--fgColor-success, var(--color-success-fg, #1a7f37));
 }
 
-.gutterhub-gutter.gutterhub-partial {
-  --gutterhub-color: var(--fgColor-attention, var(--color-attention-fg, #9a6700));
+.gutterhub-gutter.gutterhub-l1-bad {
+  --gutterhub-c1: var(--fgColor-danger, var(--color-danger-fg, #cf222e));
+}
+
+.gutterhub-gutter.gutterhub-l1-partial {
+  --gutterhub-c1: var(--fgColor-attention, var(--color-attention-fg, #9a6700));
+}
+
+/* Channel 2 — the second configured report. */
+.gutterhub-gutter.gutterhub-l2-good {
+  --gutterhub-c2: var(--fgColor-success, var(--color-success-fg, #1a7f37));
+}
+
+.gutterhub-gutter.gutterhub-l2-bad {
+  --gutterhub-c2: var(--fgColor-danger, var(--color-danger-fg, #cf222e));
+}
+
+.gutterhub-gutter.gutterhub-l2-partial {
+  --gutterhub-c2: var(--fgColor-attention, var(--color-attention-fg, #9a6700));
+}
+
+/*
+ * Where the reports disagree — one says the line is fine, another does not. This is the
+ * finding worth acting on, so it gets a dotted underline in addition to the two bars
+ * rather than being left to the tooltip alone.
+ */
+.gutterhub-gutter.gutterhub-conflict {
+  border-bottom: 1px dotted var(--fgColor-attention, #9a6700);
+}
+
+/* Single-report colours, also used for the row tint. */
+.gutterhub-gutter.gutterhub-good:not(.gutterhub-dual) {
+  --gutterhub-c1: var(--fgColor-success, var(--color-success-fg, #1a7f37));
+}
+
+.gutterhub-gutter.gutterhub-bad:not(.gutterhub-dual) {
+  --gutterhub-c1: var(--fgColor-danger, var(--color-danger-fg, #cf222e));
+}
+
+.gutterhub-gutter.gutterhub-partial:not(.gutterhub-dual) {
+  --gutterhub-c1: var(--fgColor-attention, var(--color-attention-fg, #9a6700));
 }
 
 .gutterhub-row.gutterhub-highlight.gutterhub-good {

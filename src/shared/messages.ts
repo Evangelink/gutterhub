@@ -8,14 +8,25 @@ export interface ResolveCoverageRequest {
   force?: boolean;
 }
 
-export interface ResolveCoverageSuccess {
-  ok: true;
+export interface ResolvedReport {
+  /** Raw report contents, handed to the parsers unchanged. */
   text: string;
+  /** Human-readable origin, shown so users can tell what was loaded. */
   label: string;
   fileName?: string;
-  sha: string;
-  /** True when the payload came from the cache rather than the network. */
+  /** True when this payload came from the cache rather than the network. */
   cached: boolean;
+}
+
+export interface ResolveCoverageSuccess {
+  ok: true;
+  reports: ResolvedReport[];
+  sha: string;
+  /**
+   * Sources that failed while at least one other succeeded. Reported rather than thrown
+   * so that a broken second source cannot hide a perfectly good first one.
+   */
+  warnings: string[];
 }
 
 export interface ResolveCoverageFailure {
@@ -36,16 +47,20 @@ export interface OverlayStatus {
   state: 'idle' | 'loading' | 'ready' | 'empty' | 'error' | 'not-configured' | 'disabled';
   message?: string;
   hint?: string;
-  /** Origin of the report, shown so users can confirm what was loaded. */
-  label?: string;
-  /** Which kind of report is on screen, so the UI can label the states correctly. */
-  kind?: ReportKind;
+  /** Origins of the loaded reports, so users can confirm what is on screen. */
+  labels?: string[];
+  /** Which kinds of report are on screen, so the UI can label the states correctly. */
+  kinds?: ReportKind[];
+  /** Sources that failed while others succeeded. */
+  warnings?: string[];
   repositoryKey?: string;
   adapterId?: string;
   annotated?: number;
   good?: number;
   partial?: number;
   bad?: number;
+  /** Lines where the loaded reports disagree — the actionable signal. */
+  conflicts?: number;
   filesMatched?: number;
   filesTotal?: number;
 }

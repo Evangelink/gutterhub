@@ -133,16 +133,30 @@ try {
   const settingsPage = await context.newPage();
   await settingsPage.goto(`chrome-extension://${extensionId}/options.html`);
 
-  /** Seeds a report through an extension page, the only context with storage access. */
-  async function seed(report) {
+  /**
+   * Seeds one or two reports through an extension page, the only context with storage
+   * access. Every write is batched into a single `set` call: each storage change makes
+   * the content script clear and reload the overlay, so writing per-report races the
+   * assertions that follow.
+   */
+  async function seed(reports) {
     return settingsPage.evaluate(
-      async ([text, repository]) => {
+      async ([texts, repository]) => {
         const key = repository.toLowerCase();
+        const payload = {};
+        const sources = [];
 
-        await chrome.storage.local.set({
-          [`gutterhub:manual:${key}`]: { text, fileName: 'report', savedAt: Date.now() },
+        texts.forEach((text, index) => {
+          const slot = index === 0 ? undefined : `s${index}`;
+          payload[slot ? `gutterhub:manual:${key}:${slot}` : `gutterhub:manual:${key}`] = {
+            text,
+            fileName: 'report',
+            savedAt: Date.now(),
+          };
+          sources.push(slot ? { kind: 'manual', slot } : { kind: 'manual' });
         });
 
+        await chrome.storage.local.set(payload);
         await chrome.storage.sync.set({
           'gutterhub:settings': {
             enabled: true,
@@ -151,16 +165,30 @@ try {
             githubToken: '',
             enterpriseHosts: [],
             repositories: {
-              [key]: { key: repository, enabled: true, source: { kind: 'manual' }, paths: {} },
+              [key]: { key: repository, enabled: true, sources, paths: {} },
             },
           },
         });
 
         const stored = await chrome.storage.sync.get('gutterhub:settings');
-        return Object.keys(stored['gutterhub:settings'].repositories);
+        return stored['gutterhub:settings'].repositories[key].sources.length;
       },
-      [report, REPOSITORY],
+      [reports, REPOSITORY],
     );
+  }
+
+  /** Asks the content script what it thinks it did. Routed via the service worker, which
+   *  has `chrome.tabs`; `chrome.runtime` is not exposed to page context. */
+  async function overlayStatus() {
+    return worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ url: 'https://github.com/*', active: true });
+      if (!tab?.id) return null;
+      try {
+        return await chrome.tabs.sendMessage(tab.id, { type: 'gutterhub:get-status' });
+      } catch {
+        return null;
+      }
+    });
   }
 
   const pageErrors = [];
@@ -172,6 +200,21 @@ try {
     await page
       .waitForSelector('.gutterhub-gutter', { timeout: 30_000 })
       .catch(() => console.log(`  (no marker appeared on ${url})`));
+
+    // A storage write makes the content script clear and repaint. Wait for the mark
+    // count to hold steady so assertions do not land mid-repaint.
+    let previous = -1;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const count = await page.evaluate(
+        () => document.querySelectorAll('.gutterhub-gutter').length,
+      );
+      if (count > 0 && count === previous) {
+        break;
+      }
+      previous = count;
+      await page.waitForTimeout(250);
+    }
+
     return page;
   }
 
@@ -192,7 +235,7 @@ try {
 
   // ---------------------------------------------------------------- coverage
   console.log('\ncoverage report, file view');
-  check('settings written to extension storage', (await seed(coverageReport())).length === 1);
+  check('settings written to extension storage', (await seed([coverageReport()])) === 1);
 
   const blob = await open(BLOB_URL);
   const coverage = await readMarks(blob);
@@ -220,7 +263,7 @@ try {
   // The point of the seam: a different report kind should light up the same pipeline
   // with no change to the renderer, the DOM adapters or the content script.
   console.log('\nmutation report, file view');
-  await seed(mutationReport());
+  await seed([mutationReport()]);
 
   const mutationPage = await open(BLOB_URL);
   const mutation = await readMarks(mutationPage);
@@ -250,10 +293,53 @@ try {
   );
   await mutationPage.close();
 
+  // ---------------------------------------------------------------- both at once
+  // Coverage and mutation testing overlaid together. The interesting output is not
+  // either report on its own but where they disagree: a line coverage paints green
+  // whose mutants survived is code that looks tested and is not.
+  console.log('\ncoverage + mutation together, file view');
+  check('two sources accepted', (await seed([coverageReport(), mutationReport()])) === 2);
+
+  const bothPage = await open(BLOB_URL);
+  const both = await bothPage.evaluate(() => ({
+    total: document.querySelectorAll('.gutterhub-gutter').length,
+    dual: document.querySelectorAll('.gutterhub-gutter.gutterhub-dual').length,
+    l1: document.querySelectorAll('[class*="gutterhub-l1-"]').length,
+    l2: document.querySelectorAll('[class*="gutterhub-l2-"]').length,
+    conflicts: document.querySelectorAll('.gutterhub-conflict').length,
+    conflictTooltip: document.querySelector('.gutterhub-conflict')?.getAttribute('title') ?? '',
+    badge: document.querySelector('.gutterhub-badge')?.textContent ?? '',
+  }));
+
+  console.log(`  ${both.total} marks, ${both.dual} dual, ${both.conflicts} conflicts`);
+  if (both.total === 0) {
+    console.log(`  overlay status: ${JSON.stringify(await overlayStatus())}`);
+  }
+
+  check('both reports render together', both.total > 0 && both.dual > 0);
+  check('channel 1 is drawn', both.l1 > 0);
+  check('channel 2 is drawn', both.l2 > 0);
+  check(
+    'lines where the reports disagree are flagged',
+    both.conflicts > 0,
+    `conflicts=${both.conflicts}`,
+  );
+  check(
+    'the disagreement leads the tooltip',
+    /disagree/i.test(both.conflictTooltip),
+    both.conflictTooltip.split('\n')[0] ?? '',
+  );
+  check(
+    'the tooltip names both reports',
+    /Code coverage:/.test(both.conflictTooltip) && /Mutation testing:/.test(both.conflictTooltip),
+    both.conflictTooltip.replace(/\n/g, ' | '),
+  );
+  await bothPage.close();
+
   // ---------------------------------------------------------------- diff view
   if (PR_URL) {
     console.log('\ncoverage report, pull request diff');
-    await seed(coverageReport());
+    await seed([coverageReport()]);
     const pr = await open(PR_URL);
 
     const prResult = await pr.evaluate(() => {

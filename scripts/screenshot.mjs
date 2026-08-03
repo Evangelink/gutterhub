@@ -30,6 +30,28 @@ function buildReport() {
   return lines.join('\n');
 }
 
+/** Mutation report that deliberately disagrees with the coverage one on some lines. */
+function buildMutationReport() {
+  const mutants = [];
+  for (let line = 1; line <= 160; line++) {
+    // Lines divisible by 5 survive while coverage calls most of them covered — the
+    // disagreement is the point of the screenshot.
+    const status = line % 5 === 0 ? 'Survived' : line % 6 === 0 ? 'NoCoverage' : 'Killed';
+    mutants.push({
+      id: String(line),
+      mutatorName: 'ConditionalExpression',
+      status,
+      location: { start: { line, column: 1 }, end: { line, column: 20 } },
+    });
+  }
+
+  return JSON.stringify({
+    schemaVersion: '2.0',
+    thresholds: { high: 80, low: 60 },
+    files: { 'src/core/model.ts': { language: 'typescript', source: '//', mutants } },
+  });
+}
+
 mkdirSync(OUTPUT, { recursive: true });
 
 const profile = mkdtempSync(join(tmpdir(), 'gutterhub-shot-'));
@@ -51,10 +73,15 @@ try {
   const settings = await context.newPage();
   await settings.goto(`chrome-extension://${extensionId}/options.html`);
   await settings.evaluate(
-    async ([report, repository]) => {
+    async ([coverage, mutation, repository]) => {
       const key = repository.toLowerCase();
       await chrome.storage.local.set({
-        [`gutterhub:manual:${key}`]: { text: report, fileName: 'lcov.info', savedAt: Date.now() },
+        [`gutterhub:manual:${key}`]: { text: coverage, fileName: 'lcov.info', savedAt: Date.now() },
+        [`gutterhub:manual:${key}:s1`]: {
+          text: mutation,
+          fileName: 'mutation.json',
+          savedAt: Date.now(),
+        },
       });
       await chrome.storage.sync.set({
         'gutterhub:settings': {
@@ -64,12 +91,17 @@ try {
           githubToken: '',
           enterpriseHosts: [],
           repositories: {
-            [key]: { key: repository, enabled: true, source: { kind: 'manual' }, paths: {} },
+            [key]: {
+              key: repository,
+              enabled: true,
+              sources: [{ kind: 'manual' }, { kind: 'manual', slot: 's1' }],
+              paths: {},
+            },
           },
         },
       });
     },
-    [buildReport(), REPOSITORY],
+    [buildReport(), buildMutationReport(), REPOSITORY],
   );
   await settings.close();
 

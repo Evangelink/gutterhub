@@ -1,6 +1,7 @@
 import {
   loadSettings,
   saveSettings,
+  type CoverageSource,
   type GlobalSettings,
   type RepositoryConfig,
 } from '../shared/settings.js';
@@ -31,15 +32,19 @@ const ui = {
 
 let settings: GlobalSettings;
 
-function describeSource(config: RepositoryConfig): string {
-  switch (config.source.kind) {
+function describeOneSource(source: CoverageSource): string {
+  switch (source.kind) {
     case 'github-actions':
-      return `Actions artifact “${config.source.artifactName}”`;
+      return `Actions artifact “${source.artifactName}”`;
     case 'url-template':
-      return config.source.template || 'URL (not set)';
+      return source.template || 'URL (not set)';
     case 'manual':
-      return 'Uploaded by hand';
+      return source.slot ? `Uploaded by hand (${source.slot})` : 'Uploaded by hand';
   }
+}
+
+function describeSource(config: RepositoryConfig): string {
+  return config.sources.map(describeOneSource).join(' + ') || 'No source configured';
 }
 
 function renderRepositories(): void {

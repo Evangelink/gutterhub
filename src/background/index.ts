@@ -3,9 +3,16 @@ import { CoverageResolutionError, GitHubApi, resolveCoverage } from '../provider
 import {
   isMessage,
   type ResolveCoverageRequest,
+  type ResolveCoverageFailure,
   type ResolveCoverageResponse,
+  type ResolvedReport,
 } from '../shared/messages.js';
-import { loadSettings, repositoryConfig, type RepositoryConfig } from '../shared/settings.js';
+import {
+  loadSettings,
+  repositoryConfig,
+  type CoverageSource,
+  type RepositoryConfig,
+} from '../shared/settings.js';
 
 interface CacheEntry {
   text: string;
@@ -25,13 +32,17 @@ const MAX_CACHE_ENTRIES = 12;
  */
 const cache = new Map<string, CacheEntry>();
 
-function cacheKey(context: PageContext, config: RepositoryConfig, sha: string): string {
+function cacheKey(
+  context: PageContext,
+  config: RepositoryConfig,
+  source: CoverageSource,
+  sha: string,
+): string {
   return [
     context.host,
     repositoryKey(context),
     sha,
-    config.source.kind,
-    JSON.stringify(config.source),
+    JSON.stringify(source),
     JSON.stringify(config.paths),
   ].join('|');
 }
@@ -101,7 +112,7 @@ async function handleResolve(request: ResolveCoverageRequest): Promise<ResolveCo
     return {
       ok: false,
       reason: 'not-configured',
-      error: `No coverage source configured for ${key}.`,
+      error: `No report source configured for ${key}.`,
       hint: 'Open the GutterHub popup to set one up.',
     };
   }
@@ -114,62 +125,83 @@ async function handleResolve(request: ResolveCoverageRequest): Promise<ResolveCo
 
   try {
     const { sha, branch } = await resolveSha(request.context, api);
-    const entryKey = cacheKey(request.context, config, sha);
 
-    if (!request.force) {
-      const cached = readCache(entryKey);
-      if (cached) {
-        return {
-          ok: true,
-          cached: true,
-          text: cached.text,
-          label: cached.label,
-          sha: cached.sha,
-          ...(cached.fileName ? { fileName: cached.fileName } : {}),
+    const reports: ResolvedReport[] = [];
+    const warnings: string[] = [];
+    const failures: ResolveCoverageFailure[] = [];
+
+    for (const source of config.sources) {
+      const entryKey = cacheKey(request.context, config, source, sha);
+
+      if (!request.force) {
+        const cached = readCache(entryKey);
+        if (cached) {
+          reports.push({
+            text: cached.text,
+            label: cached.label,
+            cached: true,
+            ...(cached.fileName ? { fileName: cached.fileName } : {}),
+          });
+          continue;
+        }
+      }
+
+      try {
+        const resolved = await resolveCoverage(source, {
+          context: request.context,
+          sha,
+          token: settings.githubToken,
+          ...(branch ? { branch } : {}),
+        });
+
+        const entry: CacheEntry = {
+          text: resolved.text,
+          label: resolved.label,
+          sha,
+          storedAt: Date.now(),
+          ...(resolved.fileName ? { fileName: resolved.fileName } : {}),
         };
+        writeCache(entryKey, entry);
+
+        reports.push({
+          text: entry.text,
+          label: entry.label,
+          cached: false,
+          ...(entry.fileName ? { fileName: entry.fileName } : {}),
+        });
+      } catch (error) {
+        // Collected rather than rethrown: one broken source must not hide a working one.
+        const failure = describeFailure(error);
+        failures.push(failure);
+        warnings.push(`${source.kind}: ${failure.error}`);
       }
     }
 
-    const resolved = await resolveCoverage(config.source, {
-      context: request.context,
-      sha,
-      token: settings.githubToken,
-      ...(branch ? { branch } : {}),
-    });
-
-    const entry: CacheEntry = {
-      text: resolved.text,
-      label: resolved.label,
-      sha,
-      storedAt: Date.now(),
-      ...(resolved.fileName ? { fileName: resolved.fileName } : {}),
-    };
-    writeCache(entryKey, entry);
-
-    return {
-      ok: true,
-      cached: false,
-      text: entry.text,
-      label: entry.label,
-      sha,
-      ...(entry.fileName ? { fileName: entry.fileName } : {}),
-    };
-  } catch (error) {
-    if (error instanceof CoverageResolutionError) {
-      return {
-        ok: false,
-        reason: 'error',
-        error: error.message,
-        ...(error.hint ? { hint: error.hint } : {}),
-      };
+    if (reports.length === 0) {
+      return failures[0] ?? { ok: false, reason: 'error', error: 'No sources configured.' };
     }
 
+    return { ok: true, reports, sha, warnings };
+  } catch (error) {
+    return describeFailure(error);
+  }
+}
+
+function describeFailure(error: unknown): ResolveCoverageFailure {
+  if (error instanceof CoverageResolutionError) {
     return {
       ok: false,
       reason: 'error',
-      error: error instanceof Error ? error.message : 'Unexpected failure.',
+      error: error.message,
+      ...(error.hint ? { hint: error.hint } : {}),
     };
   }
+
+  return {
+    ok: false,
+    reason: 'error',
+    error: error instanceof Error ? error.message : 'Unexpected failure.',
+  };
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

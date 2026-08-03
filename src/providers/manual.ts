@@ -7,8 +7,11 @@ export interface ManualReport {
   savedAt: number;
 }
 
-function key(owner: string, repo: string): string {
-  return `gutterhub:manual:${owner.toLowerCase()}/${repo.toLowerCase()}`;
+function key(owner: string, repo: string, slot: string | undefined): string {
+  const base = `gutterhub:manual:${owner.toLowerCase()}/${repo.toLowerCase()}`;
+  // The empty slot keeps the key used before multiple reports were supported, so an
+  // existing upload survives the upgrade.
+  return slot ? `${base}:${slot}` : base;
 }
 
 /**
@@ -19,19 +22,25 @@ export async function saveManualReport(
   owner: string,
   repo: string,
   report: Omit<ManualReport, 'savedAt'>,
+  slot?: string,
 ): Promise<void> {
   await chrome.storage.local.set({
-    [key(owner, repo)]: { ...report, savedAt: Date.now() } satisfies ManualReport,
+    [key(owner, repo, slot)]: { ...report, savedAt: Date.now() } satisfies ManualReport,
   });
 }
 
-export async function loadManualReport(owner: string, repo: string): Promise<ManualReport | null> {
-  const stored = await chrome.storage.local.get(key(owner, repo));
-  return (stored[key(owner, repo)] as ManualReport | undefined) ?? null;
+export async function loadManualReport(
+  owner: string,
+  repo: string,
+  slot?: string,
+): Promise<ManualReport | null> {
+  const storageKey = key(owner, repo, slot);
+  const stored = await chrome.storage.local.get(storageKey);
+  return (stored[storageKey] as ManualReport | undefined) ?? null;
 }
 
-export async function clearManualReport(owner: string, repo: string): Promise<void> {
-  await chrome.storage.local.remove(key(owner, repo));
+export async function clearManualReport(owner: string, repo: string, slot?: string): Promise<void> {
+  await chrome.storage.local.remove(key(owner, repo, slot));
 }
 
 /**
@@ -46,11 +55,11 @@ export const manualProvider: CoverageProvider = {
       throw new CoverageResolutionError('Wrong provider for this source.');
     }
 
-    const report = await loadManualReport(request.context.owner, request.context.repo);
+    const report = await loadManualReport(request.context.owner, request.context.repo, source.slot);
     if (!report) {
       throw new CoverageResolutionError(
         'No report has been uploaded for this repository.',
-        'Open the GutterHub popup and paste or upload a coverage report.',
+        'Open the GutterHub popup and paste or upload a report.',
       );
     }
 
