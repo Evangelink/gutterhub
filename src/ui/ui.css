@@ -29,6 +29,14 @@
   box-sizing: border-box;
 }
 
+/*
+ * A class-based `display` rule outranks the user-agent rule for `[hidden]`, so elements
+ * toggled with the `hidden` attribute stay visible unless this is stated explicitly.
+ */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   padding: 16px;

@@ -1,13 +1,14 @@
 /**
  * End-to-end smoke test.
  *
- * Loads the built Chrome extension into a real browser, points it at a live GitHub page,
- * and checks that coverage markers actually appear. Unit tests cover the parsing, path
+ * Loads the built Chrome extension into a real browser, points it at live GitHub pages,
+ * and checks that coverage markers actually appear. Unit tests cover parsing, path
  * matching and rendering in isolation; this is the only check that the manifest is valid,
- * the content script is injected, page detection fires, background messaging works and
+ * the content script is injected, page detection fires, background messaging works, and
  * the adapters match GitHub's *current* markup rather than the fixtures.
  *
  *   node scripts/e2e.mjs [--headed]
+ *   GUTTERHUB_E2E_PR=<pull request files url> node scripts/e2e.mjs
  */
 
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
@@ -20,20 +21,37 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENSION = join(ROOT, 'dist', 'chrome');
 const headed = process.argv.includes('--headed');
 
-/** A file in this repository, with a report that deliberately disagrees on the path root. */
-const TARGET = 'https://github.com/Evangelink/gutterhub/blob/main/src/core/model.ts';
-const REPORT = [
-  'TN:',
-  'SF:/home/runner/work/gutterhub/gutterhub/src/core/model.ts',
-  'DA:1,5',
-  'DA:2,5',
-  'DA:3,0',
-  'DA:4,7',
-  'BRDA:4,0,0,7',
-  'BRDA:4,0,1,-',
-  'end_of_record',
-  '',
-].join('\n');
+const REPOSITORY = 'Evangelink/gutterhub';
+const BLOB_URL = `https://github.com/${REPOSITORY}/blob/main/src/core/model.ts`;
+/** Optional: a pull request touching the same file, to exercise the diff adapter. */
+const PR_URL = process.env['GUTTERHUB_E2E_PR'] ?? '';
+
+/**
+ * The report deliberately uses an absolute CI path, so a pass also proves that suffix
+ * matching maps build paths onto repository paths.
+ */
+const REPORT_PATH = '/home/runner/work/gutterhub/gutterhub/src/core/model.ts';
+
+/** Fixed states for the first four lines, then a deterministic pattern for the rest. */
+function buildReport() {
+  const lines = [
+    'TN:',
+    `SF:${REPORT_PATH}`,
+    'DA:1,5',
+    'DA:2,5',
+    'DA:3,0',
+    'DA:4,7',
+    'BRDA:4,0,0,7',
+    'BRDA:4,0,1,-',
+  ];
+
+  for (let line = 5; line <= 300; line++) {
+    lines.push(`DA:${line},${line % 3 === 0 ? 0 : line}`);
+  }
+
+  lines.push('end_of_record', '');
+  return lines.join('\n');
+}
 
 const failures = [];
 
@@ -73,19 +91,17 @@ try {
   console.log(`extension id: ${extensionId}`);
   check('background service worker started', Boolean(extensionId));
 
-  // Seed configuration through an extension page, which is the only context with access
-  // to the extension's storage.
+  // Seed configuration through an extension page, the only context with access to
+  // extension storage.
   const settingsPage = await context.newPage();
   await settingsPage.goto(`chrome-extension://${extensionId}/options.html`);
 
   const seeded = await settingsPage.evaluate(
-    async ([report]) => {
+    async ([report, repository]) => {
+      const key = repository.toLowerCase();
+
       await chrome.storage.local.set({
-        'gutterhub:manual:evangelink/gutterhub': {
-          text: report,
-          fileName: 'lcov.info',
-          savedAt: Date.now(),
-        },
+        [`gutterhub:manual:${key}`]: { text: report, fileName: 'lcov.info', savedAt: Date.now() },
       });
 
       await chrome.storage.sync.set({
@@ -96,12 +112,7 @@ try {
           githubToken: '',
           enterpriseHosts: [],
           repositories: {
-            'evangelink/gutterhub': {
-              key: 'Evangelink/gutterhub',
-              enabled: true,
-              source: { kind: 'manual' },
-              paths: {},
-            },
+            [key]: { key: repository, enabled: true, source: { kind: 'manual' }, paths: {} },
           },
         },
       });
@@ -109,66 +120,105 @@ try {
       const stored = await chrome.storage.sync.get('gutterhub:settings');
       return Object.keys(stored['gutterhub:settings'].repositories);
     },
-    [REPORT],
+    [buildReport(), REPOSITORY],
   );
 
-  check('settings written to extension storage', seeded.includes('evangelink/gutterhub'));
+  check('settings written to extension storage', seeded.includes(REPOSITORY.toLowerCase()));
   await settingsPage.close();
 
-  const page = await context.newPage();
   const pageErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(error.message));
 
-  await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  async function open(url) {
+    const page = await context.newPage();
+    page.on('pageerror', (error) => pageErrors.push(`${url}: ${error.message}`));
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page
+      .waitForSelector('.gutterhub-gutter', { timeout: 30_000 })
+      .catch(() => console.log(`  (no marker appeared on ${url})`));
+    return page;
+  }
 
-  await page
-    .waitForSelector('.gutterhub-gutter', { timeout: 30_000 })
-    .catch(() => console.log('  (no marker appeared within 30s)'));
+  console.log('\nfile view');
+  const blob = await open(BLOB_URL);
 
-  const result = await page.evaluate(() => ({
+  const blobResult = await blob.evaluate(() => ({
     covered: document.querySelectorAll('.gutterhub-covered.gutterhub-gutter').length,
     uncovered: document.querySelectorAll('.gutterhub-uncovered.gutterhub-gutter').length,
     partial: document.querySelectorAll('.gutterhub-partial.gutterhub-gutter').length,
     total: document.querySelectorAll('.gutterhub-gutter').length,
-    // Line 5 onwards is absent from the report and must stay unmarked.
-    marked: [...document.querySelectorAll('.gutterhub-gutter')].map((element) =>
-      Number.parseInt(
-        element.getAttribute('data-line-number') ?? element.textContent.trim(),
-        10,
-      ),
+    renderedLines: document.querySelectorAll('.react-file-line[data-line-number]').length,
+    numbers: [...document.querySelectorAll('.gutterhub-gutter')].map((element) =>
+      Number.parseInt(element.getAttribute('data-line-number') ?? '0', 10),
     ),
     tooltip:
       document.querySelector('.gutterhub-covered.gutterhub-gutter')?.getAttribute('title') ?? '',
+    tinted: document.querySelectorAll('.gutterhub-row.gutterhub-highlight').length,
   }));
 
-  console.log(`  markers: ${JSON.stringify(result)}`);
+  console.log(`  ${blobResult.renderedLines} rendered lines, ${blobResult.total} markers`);
 
-  check('markers were drawn on a live GitHub page', result.total > 0);
-  check('covered lines are green', result.covered === 2, `got ${result.covered}, expected 2`);
-  check('uncovered lines are red', result.uncovered === 1, `got ${result.uncovered}, expected 1`);
-  check('branch-partial line is amber', result.partial === 1, `got ${result.partial}, expected 1`);
+  check('markers were drawn on a live file view', blobResult.total > 0);
   check(
     'an absolute CI path resolved to the repository path',
-    result.total === 4,
-    `got ${result.total}, expected 4`,
+    blobResult.total === blobResult.renderedLines,
+    `${blobResult.total} markers for ${blobResult.renderedLines} lines`,
   );
   check(
-    'only the reported lines were marked',
-    result.marked.every((line) => line >= 1 && line <= 4),
-    JSON.stringify(result.marked),
+    'each line is annotated exactly once',
+    new Set(blobResult.numbers).size === blobResult.numbers.length,
+    'duplicate line numbers found',
   );
-  check('tooltips carry the hit count', /hit/.test(result.tooltip), result.tooltip);
-  check('no uncaught page errors', pageErrors.length === 0, pageErrors.join('; '));
+  check('covered lines are green', blobResult.covered > 0);
+  check('uncovered lines are red', blobResult.uncovered > 0);
+  check('a branch-partial line is amber', blobResult.partial > 0);
+  check('tooltips carry the hit count', /hit/.test(blobResult.tooltip), blobResult.tooltip);
+  check('rows are tinted', blobResult.tinted > 0);
+  await blob.close();
 
-  const status = await page.evaluate(
-    () =>
-      new Promise((resolve) =>
-        chrome.runtime.sendMessage({ type: 'gutterhub:get-status' }, resolve),
-      ),
-  ).catch(() => null);
-  if (status) {
-    console.log(`  status: ${JSON.stringify(status)}`);
+  if (PR_URL) {
+    console.log('\npull request diff');
+    const pr = await open(PR_URL);
+
+    const prResult = await pr.evaluate(() => {
+      const markers = [...document.querySelectorAll('.gutterhub-gutter')];
+
+      return {
+        total: markers.length,
+        rightCells: document.querySelectorAll('td.blob-num.js-blob-rnum[data-line-number]').length,
+        allOnRight: markers.every((element) => element.classList.contains('js-blob-rnum')),
+        deletionsMarked: document.querySelectorAll('td.blob-num-deletion.gutterhub-gutter').length,
+        numbers: markers.map((element) =>
+          Number.parseInt(element.getAttribute('data-line-number') ?? '0', 10),
+        ),
+        badge: document.querySelector('.gutterhub-badge')?.textContent ?? '',
+      };
+    });
+
+    console.log(`  ${prResult.rightCells} new-file lines, ${prResult.total} markers`);
+
+    check('markers were drawn on a live pull request diff', prResult.total > 0);
+    check(
+      'every new-file line is annotated',
+      prResult.total === prResult.rightCells,
+      `${prResult.total} markers for ${prResult.rightCells} lines`,
+    );
+    check('markers land on the new-file column', prResult.allOnRight);
+    check('deletion rows are left alone', prResult.deletionsMarked === 0);
+    check(
+      'each diff line is annotated exactly once',
+      new Set(prResult.numbers).size === prResult.numbers.length,
+    );
+    check(
+      'the file header shows a coverage badge',
+      /% covered/.test(prResult.badge),
+      prResult.badge,
+    );
+    await pr.close();
+  } else {
+    console.log('\npull request diff skipped (set GUTTERHUB_E2E_PR to a pull request files URL)');
   }
+
+  check('no uncaught page errors', pageErrors.length === 0, pageErrors.join('; '));
 } finally {
   await context?.close();
   rmSync(profile, { recursive: true, force: true });

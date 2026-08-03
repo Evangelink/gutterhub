@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 
-const url = process.argv[2] ?? 'https://github.com/Evangelink/gutterhub/blob/main/src/core/model.ts';
+const url =
+  process.argv[2] ?? 'https://github.com/Evangelink/gutterhub/blob/main/src/core/model.ts';
 const profile = mkdtempSync(join(tmpdir(), 'gutterhub-probe-'));
 const context = await chromium.launchPersistentContext(profile, {
   channel: 'chromium',
@@ -37,13 +38,16 @@ try {
       });
     }
 
-    const pathCarriers = ['data-tagsearch-path', 'data-path', 'data-file-path', 'data-file-name'].map(
-      (attribute) => ({
-        attribute,
-        count: document.querySelectorAll(`[${attribute}]`).length,
-        first: document.querySelector(`[${attribute}]`)?.getAttribute(attribute) ?? null,
-      }),
-    );
+    const pathCarriers = [
+      'data-tagsearch-path',
+      'data-path',
+      'data-file-path',
+      'data-file-name',
+    ].map((attribute) => ({
+      attribute,
+      count: document.querySelectorAll(`[${attribute}]`).length,
+      first: document.querySelector(`[${attribute}]`)?.getAttribute(attribute) ?? null,
+    }));
 
     return {
       total: elements.length,

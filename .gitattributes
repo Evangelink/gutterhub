@@ -1,0 +1,5 @@
+# Normalise line endings so that Prettier's `endOfLine: lf` check passes on every
+# platform, and so Windows checkouts do not show whole-file diffs.
+* text=auto eol=lf
+
+*.png binary

@@ -9,13 +9,7 @@ pull request code coverage, and what GitLab shows in its diff view.
 It is **vendor-neutral**: it reads plain coverage reports, so it works with whatever your
 CI already produces. No account, no SaaS, no uploading your coverage anywhere.
 
-```
-  ✓  14  export function add(a: number, b: number) {
-  ✓  15    if (a < 0) {
-  !  16      return clamp(a) + b;        ← amber: executed, but one branch never taken
-  ✓  17    }
-  ✗  18    return legacyAdd(a, b);       ← red: never executed
-```
+![Coverage gutters on a GitHub file view](docs/images/file-view.png)
 
 ## Status
 
@@ -88,6 +82,8 @@ to be fully consumed, so `a/b/Foo.cs` never picks up coverage from `x/b/Foo.cs`.
 handles most reports with no configuration. When it does not, the options page offers a
 prefix to strip, a prefix to add, and case-insensitive matching.
 
+![GutterHub settings](docs/images/options.png)
+
 ## Permissions
 
 | Permission                 | Why                                                                                         |
@@ -107,8 +103,14 @@ npm ci
 npm run verify     # typecheck + tests + build
 npm run watch      # rebuild on change
 npm run test       # unit and DOM tests
+npm run e2e        # load the built extension in Chromium against live GitHub
 npm run package    # store-ready zips in artifacts/
 ```
+
+`npm run e2e` is the check that matters most. It loads `dist/chrome` into a real browser,
+seeds a report, opens a live GitHub page and asserts that the markers land where they
+should. It is what caught the modern code view annotating every line twice. Point it at a
+diff as well with `GUTTERHUB_E2E_PR=<pull request files url> npm run e2e`.
 
 Icons are generated, not committed as opaque binaries: `node scripts/generate-icons.mjs`.
 
@@ -137,6 +139,9 @@ treats that as a design constraint rather than an accident:
   reflows and no table layout is disturbed.
 - A file with no matching coverage is left completely untouched, because a half-painted
   diff reads as "this code is untested" rather than "no data".
+- `node scripts/probe.mjs <github url>` dumps what a live page actually looks like —
+  which selectors match, how many elements carry `data-line-number`, and whether any
+  path attribute is present. Start there when the overlay stops appearing.
 
 ## Licence
 
