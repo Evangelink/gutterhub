@@ -13,6 +13,7 @@ import { chromium } from 'playwright';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENSION = join(ROOT, 'dist', 'chrome');
 const OUTPUT = join(ROOT, 'docs', 'images');
+const STORE = join(ROOT, 'docs', 'store');
 
 const REPOSITORY = 'Evangelink/gutterhub';
 const REPORT_PATH = '/home/runner/work/gutterhub/gutterhub/src/core/model.ts';
@@ -116,6 +117,22 @@ try {
   const code = page.locator('.react-code-file-contents').first();
   await code.screenshot({ path: join(OUTPUT, 'file-view.png') });
   console.log('docs/images/file-view.png');
+
+  // Store-sized screenshots. The Chrome Web Store accepts 1280x800 or 640x400 only, and
+  // the README captures are whatever height the file happened to be, so they cannot be
+  // reused. Capturing the viewport rather than the element gives exactly 1280x800.
+  mkdirSync(STORE, { recursive: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: join(STORE, 'screenshot-1-file-view.png'), scale: 'css' });
+  console.log('docs/store/screenshot-1-file-view.png (1280x800)');
+
+  // Second shot further down, where the two-channel gutter and a conflict are visible.
+  await page.evaluate(() => window.scrollBy(0, 1400));
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: join(STORE, 'screenshot-2-conflicts.png'), scale: 'css' });
+  console.log('docs/store/screenshot-2-conflicts.png (1280x800)');
 
   const options = await context.newPage();
   await options.setViewportSize({ width: 860, height: 1100 });

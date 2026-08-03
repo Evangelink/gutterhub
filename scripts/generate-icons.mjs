@@ -55,12 +55,17 @@ function chunk(type, data) {
 }
 
 function encodePng(size, pixels) {
+  return encodePng2(size, size, pixels);
+}
+
+/** Encodes non-square images too, which the promotional tile needs. */
+function encodePng2(width, height, pixels) {
   const signature = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   const ihdr = new Uint8Array(13);
   const ihdrView = new DataView(ihdr.buffer);
-  ihdrView.setUint32(0, size);
-  ihdrView.setUint32(4, size);
+  ihdrView.setUint32(0, width);
+  ihdrView.setUint32(4, height);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 6; // colour type: RGBA
   ihdr[10] = 0; // deflate
@@ -68,11 +73,11 @@ function encodePng(size, pixels) {
   ihdr[12] = 0; // no interlace
 
   // Each scanline is prefixed with its filter type; 0 means "none".
-  const raw = new Uint8Array(size * (size * 4 + 1));
-  for (let y = 0; y < size; y++) {
-    const rowStart = y * (size * 4 + 1);
+  const raw = new Uint8Array(height * (width * 4 + 1));
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * (width * 4 + 1);
     raw[rowStart] = 0;
-    raw.set(pixels.subarray(y * size * 4, (y + 1) * size * 4), rowStart + 1);
+    raw.set(pixels.subarray(y * width * 4, (y + 1) * width * 4), rowStart + 1);
   }
 
   const parts = [
@@ -165,3 +170,62 @@ for (const size of SIZES) {
   writeFileSync(join(ROOT, 'assets', `icon-${size}.png`), png);
   console.log(`assets/icon-${size}.png (${png.length} bytes)`);
 }
+
+/**
+ * Small promotional tile, 440x280.
+ *
+ * The Chrome Web Store requires this before a listing can be published, and its guidance
+ * is explicit: communicate the brand rather than showing a screenshot, avoid text, fill
+ * the region, and keep the edges well defined. So this is the gutter motif — the three
+ * coverage states beside suggested code — scaled up, and nothing else.
+ */
+function drawPromo(width, height) {
+  const pixels = new Uint8Array(width * height * 4);
+  const set = (x, y, colour) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) {
+      return;
+    }
+    pixels.set(colour, (y * width + x) * 4);
+  };
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      set(x, y, BACKGROUND);
+    }
+  }
+
+  // Coverage bars down the left, one band per state.
+  const barLeft = Math.round(width * 0.11);
+  const barWidth = Math.round(width * 0.035);
+  const bands = [COVERED, COVERED, PARTIAL, COVERED, UNCOVERED, COVERED, PARTIAL, UNCOVERED];
+  const rowHeight = Math.round(height * 0.075);
+  const top = Math.round((height - bands.length * rowHeight) / 2);
+
+  for (let index = 0; index < bands.length; index++) {
+    const rowTop = top + index * rowHeight;
+    for (let y = rowTop; y < rowTop + rowHeight - 4; y++) {
+      for (let x = barLeft; x < barLeft + barWidth; x++) {
+        set(x, y, bands[index]);
+      }
+    }
+
+    // A suggestion of code beside each bar, with a stable pseudo-random length so the
+    // tile looks like source without carrying any text.
+    const codeLeft = barLeft + barWidth + Math.round(width * 0.04);
+    const widths = [0.62, 0.44, 0.55, 0.7, 0.38, 0.5, 0.66, 0.42];
+    const codeWidth = Math.round((width - codeLeft - width * 0.1) * widths[index]);
+    const codeTop = rowTop + Math.round(rowHeight * 0.28);
+    for (let y = codeTop; y < codeTop + Math.max(3, Math.round(rowHeight * 0.34)); y++) {
+      for (let x = codeLeft; x < codeLeft + codeWidth; x++) {
+        set(x, y, CODE_LINE);
+      }
+    }
+  }
+
+  return pixels;
+}
+
+const promo = encodePng2(440, 280, drawPromo(440, 280));
+mkdirSync(join(ROOT, 'docs', 'store'), { recursive: true });
+writeFileSync(join(ROOT, 'docs', 'store', 'promo-440x280.png'), promo);
+console.log(`docs/store/promo-440x280.png (${promo.length} bytes)`);
