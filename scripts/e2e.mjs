@@ -12,6 +12,7 @@
  *
  *   node scripts/e2e.mjs [--headed]
  *   GUTTERHUB_E2E_PR=<pull request files url> node scripts/e2e.mjs
+ *   GUTTERHUB_E2E_CHANNEL=msedge node scripts/e2e.mjs
  */
 
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
@@ -23,6 +24,11 @@ import { chromium } from 'playwright';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENSION = join(ROOT, 'dist', 'chrome');
 const headed = process.argv.includes('--headed');
+/**
+ * Which browser build to drive. Defaults to Playwright's own Chromium; set `msedge` or
+ * `chrome` to verify against a real installed browser, which is what users actually run.
+ */
+const CHANNEL = process.env['GUTTERHUB_E2E_CHANNEL'] ?? 'chromium';
 
 const REPOSITORY = 'Evangelink/gutterhub';
 const FILE_PATH = 'src/core/model.ts';
@@ -106,9 +112,9 @@ let context;
 
 try {
   context = await chromium.launchPersistentContext(profile, {
-    // Extensions are unavailable in the old headless shell, so use the real browser
-    // in its headless mode.
-    channel: 'chromium',
+    // Extensions are unavailable in the old headless shell, so use a real browser
+    // build in its headless mode.
+    channel: CHANNEL,
     headless: !headed,
     args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`],
   });
@@ -120,6 +126,7 @@ try {
   }
 
   const extensionId = new URL(worker.url()).host;
+  console.log(`channel: ${CHANNEL}`);
   console.log(`extension id: ${extensionId}`);
   check('background service worker started', Boolean(extensionId));
 
