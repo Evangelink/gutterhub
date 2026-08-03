@@ -1,0 +1,80 @@
+/*
+ * GutterHub overlay styles.
+ *
+ * Markers are drawn with inset box-shadows rather than borders so that nothing reflows:
+ * a border on a diff line-number cell shifts every line of code to the right.
+ * Colours come from GitHub's own theme variables where available, so light, dark and
+ * high-contrast themes are all handled without media queries.
+ */
+
+.gutterhub-gutter {
+  position: relative;
+  box-shadow: inset 4px 0 0 0 var(--gutterhub-color, transparent);
+}
+
+.gutterhub-gutter.gutterhub-covered {
+  --gutterhub-color: var(--fgColor-success, var(--color-success-fg, #1a7f37));
+}
+
+.gutterhub-gutter.gutterhub-uncovered {
+  --gutterhub-color: var(--fgColor-danger, var(--color-danger-fg, #cf222e));
+}
+
+.gutterhub-gutter.gutterhub-partial {
+  --gutterhub-color: var(--fgColor-attention, var(--color-attention-fg, #9a6700));
+}
+
+.gutterhub-row.gutterhub-highlight.gutterhub-covered {
+  background-color: var(--bgColor-success-muted, rgba(74, 194, 107, 0.12));
+}
+
+.gutterhub-row.gutterhub-highlight.gutterhub-uncovered {
+  background-color: var(--bgColor-danger-muted, rgba(248, 81, 73, 0.12));
+}
+
+.gutterhub-row.gutterhub-highlight.gutterhub-partial {
+  background-color: var(--bgColor-attention-muted, rgba(210, 153, 34, 0.12));
+}
+
+/*
+ * A diff row is a table row whose cells paint their own backgrounds, so tinting the row
+ * itself has no visible effect. Tint the cells instead, while leaving the line-number
+ * cells alone so the coverage bar stays legible.
+ */
+tr.gutterhub-row.gutterhub-highlight.gutterhub-covered > td:not(.blob-num) {
+  background-color: var(--bgColor-success-muted, rgba(74, 194, 107, 0.12));
+}
+
+tr.gutterhub-row.gutterhub-highlight.gutterhub-uncovered > td:not(.blob-num) {
+  background-color: var(--bgColor-danger-muted, rgba(248, 81, 73, 0.12));
+}
+
+tr.gutterhub-row.gutterhub-highlight.gutterhub-partial > td:not(.blob-num) {
+  background-color: var(--bgColor-attention-muted, rgba(210, 153, 34, 0.12));
+}
+
+/* Summary badge injected into diff file headers. */
+.gutterhub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 0 7px;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 2em;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.gutterhub-badge[data-level='good'] {
+  color: var(--fgColor-success, #1a7f37);
+  border-color: var(--borderColor-success-emphasis, #1a7f37);
+}
+
+.gutterhub-badge[data-level='poor'] {
+  color: var(--fgColor-danger, #cf222e);
+  border-color: var(--borderColor-danger-emphasis, #cf222e);
+}

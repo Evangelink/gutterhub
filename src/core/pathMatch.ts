@@ -57,7 +57,7 @@ function segmentsOf(path: string): string[] {
 }
 
 /** Counts trailing segments shared by two paths, comparing whole segments only. */
-export function commonSuffixSegments(a: string[], b: string[]): number {
+export function commonSuffixSegments(a: readonly string[], b: readonly string[]): number {
   let count = 0;
   let indexA = a.length - 1;
   let indexB = b.length - 1;

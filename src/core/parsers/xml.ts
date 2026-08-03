@@ -68,9 +68,11 @@ function parseAttributes(raw: string): Record<string, string> {
 export function scanXml(input: string, handlers: XmlHandlers): void {
   // Comments and CDATA can contain angle brackets that would otherwise be mistaken
   // for markup, so neutralise them before scanning.
-  const text = input.replace(COMMENT_PATTERN, '').replace(CDATA_PATTERN, (_, content: string) =>
-    String(content).replace(/</g, '&lt;').replace(/>/g, '&gt;'),
-  );
+  const text = input
+    .replace(COMMENT_PATTERN, '')
+    .replace(CDATA_PATTERN, (_, content: string) =>
+      String(content).replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+    );
 
   const stack: string[] = [];
   let cursor = 0;

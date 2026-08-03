@@ -1,0 +1,6 @@
+.prettierignore
+dist/
+artifacts/
+node_modules/
+assets/
+package-lock.json

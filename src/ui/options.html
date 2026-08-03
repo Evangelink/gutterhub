@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GutterHub settings</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      body {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>GutterHub settings</h1>
+    <p class="muted">
+      Coverage gutters on GitHub pull requests, file views and commits.
+      <a href="https://github.com/Evangelink/gutterhub" target="_blank" rel="noreferrer">
+        Documentation
+      </a>
+    </p>
+
+    <h2>General</h2>
+    <div class="card">
+      <label class="inline">
+        <input type="checkbox" id="enabled" />
+        Show coverage overlays
+      </label>
+      <label class="inline">
+        <input type="checkbox" id="highlight-lines" />
+        Tint the whole line, not just the gutter
+      </label>
+      <label class="inline">
+        <input type="checkbox" id="show-partial" />
+        Show partially covered lines in amber
+      </label>
+    </div>
+
+    <h2>GitHub access</h2>
+    <div class="card">
+      <div class="field">
+        <label for="token">Personal access token</label>
+        <input id="token" type="password" placeholder="ghp_… or github_pat_…" autocomplete="off" />
+        <p class="hint">
+          Needed to download Actions artifacts and to read private repositories. A classic token
+          needs <code>repo</code>; a fine-grained token needs <strong>Actions: read</strong> and
+          <strong>Contents: read</strong>. Stored in extension storage and only ever sent to the
+          GitHub host you are browsing.
+        </p>
+      </div>
+      <div class="field">
+        <label for="enterprise-hosts">GitHub Enterprise hosts</label>
+        <input id="enterprise-hosts" type="text" placeholder="github.example.com, ghe.corp.net" />
+        <p class="hint">
+          Comma-separated. GutterHub will ask for permission to run on these hosts when you save.
+        </p>
+      </div>
+    </div>
+
+    <h2>Repositories</h2>
+    <div class="card">
+      <div class="repo-list" id="repo-list"></div>
+      <p class="hint" id="repo-empty">
+        Nothing configured yet. Open a repository on GitHub and use the GutterHub popup.
+      </p>
+    </div>
+
+    <h2>Path mapping</h2>
+    <div class="card">
+      <p class="muted">
+        Coverage reports spell paths differently from the repository — absolute CI paths, paths
+        relative to a project folder, or bare file names. GutterHub matches on the longest common
+        path suffix, which handles most reports without configuration. Use these only when a file
+        that should have coverage shows none.
+      </p>
+      <div class="field">
+        <label for="path-repo">Repository</label>
+        <select id="path-repo"></select>
+      </div>
+      <div class="field">
+        <label for="strip-prefix">Strip this prefix from report paths</label>
+        <input id="strip-prefix" type="text" placeholder="packages/app" />
+      </div>
+      <div class="field">
+        <label for="add-prefix">Then add this prefix</label>
+        <input id="add-prefix" type="text" placeholder="src" />
+      </div>
+      <label class="inline">
+        <input type="checkbox" id="ignore-case" />
+        Match paths case-insensitively
+      </label>
+    </div>
+
+    <div class="row">
+      <button class="primary" id="save">Save settings</button>
+      <span class="muted" id="saved"></span>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

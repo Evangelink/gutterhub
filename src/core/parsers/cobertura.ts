@@ -11,7 +11,9 @@ export interface CoberturaReport extends CoverageReport {
 
 const CONDITION_COVERAGE_PATTERN = /\((\d+)\s*\/\s*(\d+)\)/;
 
-function parseConditionCoverage(value: string | undefined): { covered: number; total: number } | null {
+function parseConditionCoverage(
+  value: string | undefined,
+): { covered: number; total: number } | null {
   if (!value) {
     return null;
   }

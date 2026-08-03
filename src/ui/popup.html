@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GutterHub</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      body {
+        width: 340px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>GutterHub</h1>
+    <p class="muted" id="repository">Not on a GitHub page</p>
+
+    <div class="card">
+      <div class="status">
+        <span class="dot" id="status-dot" data-state="idle"></span>
+        <div>
+          <div id="status-message">Idle</div>
+          <div class="hint" id="status-hint"></div>
+          <div class="hint" id="status-source"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend" id="legend" hidden>
+      <span class="covered">covered</span>
+      <span class="partial">partial</span>
+      <span class="uncovered">uncovered</span>
+    </div>
+
+    <section id="setup" hidden>
+      <h2>Coverage source</h2>
+      <div class="field">
+        <label for="source-kind">Where the report comes from</label>
+        <select id="source-kind">
+          <option value="github-actions">GitHub Actions artifact</option>
+          <option value="url-template">URL</option>
+          <option value="manual">Uploaded by hand</option>
+        </select>
+      </div>
+
+      <div class="field" id="field-artifact">
+        <label for="artifact-name">Artifact name</label>
+        <input id="artifact-name" type="text" placeholder="coverage*" />
+        <p class="hint">
+          <code>*</code> matches anything. Requires a token with <code>repo</code> scope in
+          <a href="#" id="open-options-inline">options</a>.
+        </p>
+      </div>
+
+      <div class="field" id="field-entry" hidden>
+        <label for="entry-name">File inside the artifact</label>
+        <input id="entry-name" type="text" placeholder="(first coverage file found)" />
+      </div>
+
+      <div class="field" id="field-template" hidden>
+        <label for="url-template">Report URL</label>
+        <input
+          id="url-template"
+          type="text"
+          placeholder="https://ci.example.com/{owner}/{repo}/{sha}/lcov.info"
+        />
+        <p class="hint">
+          Placeholders: <code>{owner}</code> <code>{repo}</code> <code>{sha}</code>
+          <code>{shortSha}</code> <code>{branch}</code> <code>{pr}</code>
+        </p>
+      </div>
+
+      <div class="field" id="field-manual" hidden>
+        <label for="manual-text">Paste an LCOV, Cobertura or Istanbul report</label>
+        <textarea id="manual-text" spellcheck="false"></textarea>
+        <div class="row" style="margin-top: 6px">
+          <input id="manual-file" type="file" accept=".info,.xml,.json,.lcov,text/*" />
+        </div>
+        <p class="hint" id="manual-status"></p>
+      </div>
+
+      <div class="row">
+        <button class="primary" id="save">Save</button>
+        <button id="refresh">Reload coverage</button>
+        <label class="inline" style="margin: 0 0 0 auto">
+          <input type="checkbox" id="repo-enabled" checked />
+          Enabled
+        </label>
+      </div>
+    </section>
+
+    <p style="margin-top: 14px">
+      <a href="#" id="open-options">All settings</a>
+    </p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
