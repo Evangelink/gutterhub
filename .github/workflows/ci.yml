@@ -6,12 +6,15 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
 
@@ -28,8 +31,25 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
-        run: npm test
+      - name: Test with coverage
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          npm run coverage 2>&1 | tee artifacts/coverage-summary.txt
+          {
+            echo "## Coverage"
+            echo '```text'
+            tail -n 8 artifacts/coverage-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          NO_COLOR: 1
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: gutterhub-coverage
+          path: artifacts/coverage/
 
       - name: Build
         run: npm run build
@@ -46,3 +66,20 @@ jobs:
         with:
           name: gutterhub-unpacked
           path: dist/
+
+  windows-tests:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test Windows path handling
+        run: npm test
