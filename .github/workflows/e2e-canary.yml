@@ -61,16 +61,16 @@ jobs:
             }
 
             const title = "E2E canary: GitHub markup compatibility failure";
+            const label = "e2e-canary";
             const { owner, repo } = context.repo;
-            const { data: issues } = await github.rest.issues.listForRepo({
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner,
               repo,
+              labels: label,
               state: "all",
               per_page: 100,
             });
-            const issue = issues.find(
-              (candidate) => !candidate.pull_request && candidate.title === title,
-            );
+            const issue = issues.find((candidate) => !candidate.pull_request);
             const timestamp = new Date().toISOString();
 
             if (result === "failure") {
@@ -85,6 +85,21 @@ jobs:
                 "live-site or browser failure, so inspect the run before changing selectors.",
               ].join("\n");
 
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: label });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: label,
+                  color: "B60205",
+                  description: "Live GitHub end-to-end canary failures",
+                });
+              }
+
               if (issue) {
                 await github.rest.issues.update({
                   owner,
@@ -92,9 +107,16 @@ jobs:
                   issue_number: issue.number,
                   state: "open",
                   body,
+                  labels: [label],
                 });
               } else {
-                await github.rest.issues.create({ owner, repo, title, body });
+                await github.rest.issues.create({
+                  owner,
+                  repo,
+                  title,
+                  body,
+                  labels: [label],
+                });
               }
               return;
             }
