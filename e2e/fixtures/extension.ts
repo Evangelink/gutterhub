@@ -17,6 +17,7 @@
  */
 
 import { dirname, join } from 'node:path';
+import { readdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import {
   test as base,
@@ -233,6 +234,20 @@ export class GutterHub {
       }
     });
   }
+
+  /**
+   * Reads the persisted settings straight from `chrome.storage.sync`, via the service
+   * worker, so a test can assert what actually survived a save rather than trusting the
+   * page's DOM. Returns the repository keys currently stored.
+   */
+  async storedRepositoryKeys(): Promise<string[]> {
+    return this.worker.evaluate(async () => {
+      const stored = await chrome.storage.sync.get('gutterhub:settings');
+      const settings = stored['gutterhub:settings'] as
+        { repositories?: Record<string, unknown> } | undefined;
+      return Object.keys(settings?.repositories ?? {});
+    });
+  }
 }
 
 interface Fixtures {
@@ -245,21 +260,54 @@ export const test = base.extend<Fixtures & GutterHubTestOptions>({
   offline: [false, { option: true }],
   browserChannel: [process.env['GUTTERHUB_E2E_CHANNEL'] ?? 'chromium', { option: true }],
 
-  context: async ({ browserChannel }, use) => {
+  context: async ({ browserChannel }, use, testInfo) => {
     // Extensions are unavailable in the old headless shell, so a real browser build is
     // driven in its (new) headless mode, exactly as users run it.
     //
     // GUTTERHUB_E2E_PROXY points Chromium at a (typically unreachable) proxy, which is how
     // the offline suite is proven genuinely offline: with real egress broken it still has
     // to pass, because every request is served from memory or aborted before it leaves.
+    //
+    // Video is owned here, not by the `video` use-option: because the extension needs a
+    // persistent context launched by hand, Playwright never creates the context and so its
+    // built-in video capture never runs. `recordVideo` on every launched context records
+    // all pages — github views, popup and options alike — and the teardown below keeps the
+    // recordings only when a test fails unexpectedly, matching retain-on-failure.
     const proxy = process.env['GUTTERHUB_E2E_PROXY'];
+    const videoDir = testInfo.outputPath('videos');
     const context = await chromium.launchPersistentContext('', {
       channel: browserChannel,
       args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`],
+      recordVideo: { dir: videoDir },
       ...(proxy ? { proxy: { server: proxy } } : {}),
     });
+
     await use(context);
+
+    // Closing flushes every page's video to disk. Attach the recordings on an unexpected
+    // failure so they surface in the HTML report, and delete them otherwise so a green run
+    // leaves nothing behind.
     await context.close();
+
+    const failed = testInfo.status !== testInfo.expectedStatus;
+    if (failed) {
+      let files: string[] = [];
+      try {
+        files = (await readdir(videoDir)).filter((name) => name.endsWith('.webm'));
+      } catch {
+        files = [];
+      }
+      await Promise.all(
+        files.map((name, index) =>
+          testInfo.attach(files.length > 1 ? `video-${index + 1}` : 'video', {
+            path: join(videoDir, name),
+            contentType: 'video/webm',
+          }),
+        ),
+      );
+    } else {
+      await rm(videoDir, { recursive: true, force: true });
+    }
   },
 
   serviceWorker: async ({ context }, use) => {

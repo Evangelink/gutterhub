@@ -35,8 +35,11 @@ export default defineConfig<GutterHubTestOptions>({
   outputDir: 'artifacts/playwright-output',
   reporter: [['list'], ['html', { outputFolder: 'artifacts/playwright-report', open: 'never' }]],
   use: {
+    // Video is recorded by the harness (see e2e/fixtures/extension.ts), not here: the
+    // extension needs a hand-launched persistent context, so Playwright's own video capture
+    // (this `use.video` option) never runs. Trace and screenshot go through the normal page
+    // machinery, so they stay config-driven and failure-only.
     trace: 'retain-on-failure',
-    video: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   projects: [

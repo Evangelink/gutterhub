@@ -201,6 +201,18 @@ test.describe('popup', () => {
     expect(view.legendBad).toBe('needs tests');
     expect(view.conflictsHidden, 'the conflict banner is shown').toBe(false);
     expect(view.conflicts).toMatch(/disagree/);
+
+    // The popup must report the same conflict tally the overlay actually painted, not just
+    // some disagreement. Compare its number against the content script's status.
+    const status = (await gutterhub.overlayStatus()) as { conflicts?: number };
+    const conflicts = status?.conflicts ?? 0;
+    expect(conflicts, 'the overlay found conflicts to report').toBeGreaterThan(0);
+    const shown = Number.parseInt((view.conflicts.match(/\d+/) ?? ['0'])[0]!, 10);
+    expect(shown, 'the popup shows the exact conflict count from the overlay').toBe(conflicts);
+    expect(view.conflicts, 'the count is phrased as N lines').toContain(
+      `${conflicts} line${conflicts === 1 ? '' : 's'}`,
+    );
+
     expect(view.warningsHidden, 'no warnings for two good reports').toBe(true);
 
     expect(gutterhub.leaks).toEqual([]);
@@ -289,19 +301,42 @@ test.describe('options', () => {
     expect(persisted, 'the path mapping persisted').toBe('packages/app');
   });
 
-  test('removing a repository clears it from the list', async ({ gutterhub }) => {
+  test('removing a repository persists across a reload', async ({ gutterhub }) => {
     await gutterhub.seed([coverage()]);
+    expect(
+      await gutterhub.storedRepositoryKeys(),
+      'the repository is stored to begin with',
+    ).toEqual([REPOSITORY.toLowerCase()]);
 
     const options = await gutterhub.context.newPage();
     await options.goto(OPTIONS(gutterhub.extensionId));
     await options.waitForFunction(() => document.querySelectorAll('.repo-row').length > 0);
 
+    // Remove only edits the in-memory list; Save is what writes it back.
     await options.click('.repo-row button');
     await options.waitForFunction(() => document.querySelectorAll('.repo-row').length === 0);
+    await options.click('#save');
+    await options.waitForFunction(() => document.getElementById('saved')?.textContent === 'Saved.');
 
-    const emptyShown = await options.evaluate(
+    // The removal must survive a round-trip through storage, not just the current DOM.
+    await options.reload();
+    await options.waitForFunction(
       () => !(document.getElementById('repo-empty') as HTMLElement).hidden,
     );
-    expect(emptyShown, 'the empty-state message is shown').toBe(true);
+    const afterReload = await options.evaluate(() => ({
+      rows: document.querySelectorAll('.repo-row').length,
+      emptyShown: !(document.getElementById('repo-empty') as HTMLElement).hidden,
+      pathOptions: document.querySelectorAll('#path-repo option').length,
+    }));
+    expect(afterReload.rows, 'no repository rows after reload').toBe(0);
+    expect(afterReload.emptyShown, 'the empty-state message is shown').toBe(true);
+    expect(afterReload.pathOptions, 'the path picker is empty too').toBe(0);
+
+    // And the persisted settings themselves no longer mention the repository.
+    expect(await gutterhub.storedRepositoryKeys(), 'the repository is gone from storage').toEqual(
+      [],
+    );
+
+    expect(gutterhub.leaks).toEqual([]);
   });
 });
