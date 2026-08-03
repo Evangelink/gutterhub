@@ -6,6 +6,7 @@ import {
   LEGACY_BLOB,
   LEGACY_UNIFIED_DIFF,
   REACT_BLOB,
+  REACT_BLOB_PAIRED_ROWS,
   UNKNOWN_FUTURE_MARKUP,
 } from './fixtures/github-markup.js';
 
@@ -92,21 +93,80 @@ describe('legacy blob view', () => {
 });
 
 describe('react view', () => {
-  it('collects lines from div-based markup', () => {
+  it('collects each line exactly once despite the duplicated attribute', () => {
+    // Numbers and code sit in separate columns and both carry `data-line-number`.
+    // Collecting them naively annotates every line twice.
     mount(REACT_BLOB);
 
     const { adapterId, blocks } = collectFileBlocks(document, BLOB_CONTEXT);
 
     expect(adapterId).toBe('react-view');
+    expect(blocks).toHaveLength(1);
     expect(blocks[0]!.lines.map((line) => line.number)).toEqual([1, 2, 3]);
   });
 
-  it('resolves a row element that also contains the code', () => {
+  it('puts the marker on the number column and the tint on the code', () => {
     mount(REACT_BLOB);
 
-    const [block] = collectFileBlocks(document, BLOB_CONTEXT).blocks;
+    const [line] = collectFileBlocks(document, BLOB_CONTEXT).blocks[0]!.lines;
 
-    expect(block!.lines[0]!.row.textContent).toContain('export function add');
+    expect(line!.gutter.classList.contains('react-line-number')).toBe(true);
+    expect(line!.row.classList.contains('react-file-line')).toBe(true);
+    expect(line!.row.textContent).toContain('export function add');
+  });
+
+  it('takes the path from the URL, as the page carries none', () => {
+    mount(REACT_BLOB);
+
+    expect(collectFileBlocks(document, BLOB_CONTEXT).blocks[0]!.path).toBe('src/calculator.ts');
+  });
+
+  it('also handles a layout where number and code share one row', () => {
+    mount(REACT_BLOB_PAIRED_ROWS);
+
+    const { blocks } = collectFileBlocks(document, BLOB_CONTEXT);
+
+    expect(blocks[0]!.lines.map((line) => line.number)).toEqual([1, 2, 3]);
+    expect(blocks[0]!.lines[0]!.row.textContent).toContain('export function add');
+  });
+
+  it('keeps files apart when several are on the page', () => {
+    mount(`
+      <div data-path="src/a.ts">
+        <div class="react-line-number" data-line-number="1">1</div>
+        <div class="react-file-line" data-line-number="1">const a = 1;</div>
+      </div>
+      <div data-path="src/b.ts">
+        <div class="react-line-number" data-line-number="1">1</div>
+        <div class="react-file-line" data-line-number="1">const b = 2;</div>
+      </div>
+    `);
+
+    const { blocks } = collectFileBlocks(document, BLOB_CONTEXT);
+
+    expect(blocks.map((block) => block.path)).toEqual(['src/a.ts', 'src/b.ts']);
+  });
+
+  it('does not merge files under a shared wrapper', () => {
+    // Keeping an outer container would collapse every file into one block and lose
+    // the per-file paths.
+    mount(`
+      <div data-path="ignored-wrapper">
+        <div data-path="src/a.ts">
+          <div class="react-line-number" data-line-number="1">1</div>
+          <div class="react-file-line" data-line-number="1">const a = 1;</div>
+        </div>
+        <div data-path="src/b.ts">
+          <div class="react-line-number" data-line-number="1">1</div>
+          <div class="react-file-line" data-line-number="1">const b = 2;</div>
+        </div>
+      </div>
+    `);
+
+    expect(collectFileBlocks(document, BLOB_CONTEXT).blocks.map((block) => block.path)).toEqual([
+      'src/a.ts',
+      'src/b.ts',
+    ]);
   });
 });
 

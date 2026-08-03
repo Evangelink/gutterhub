@@ -82,8 +82,31 @@ export const LEGACY_BLOB = `
 </div>
 `;
 
-/** React-rendered file view, as served by the modern code view. */
+/**
+ * React-rendered file view, matching what github.com actually serves today (verified
+ * against a live page in August 2026).
+ *
+ * Line numbers and code live in two sibling columns and **both** carry
+ * `data-line-number`, so every line is reachable twice. There is no path attribute
+ * anywhere on the page — the path has to come from the URL.
+ */
 export const REACT_BLOB = `
+<div class="react-code-file-contents">
+  <div class="react-line-numbers">
+    <div class="react-line-number react-code-text" data-line-number="1">1</div>
+    <div class="react-line-number react-code-text virtual" data-line-number="2">2</div>
+    <div class="react-line-number react-code-text virtual" data-line-number="3">3</div>
+  </div>
+  <div class="react-code-lines">
+    <div class="react-file-line html-div" data-line-number="1">export function add(a, b) {</div>
+    <div class="react-file-line html-div" data-line-number="2">  return a + b;</div>
+    <div class="react-file-line html-div" data-line-number="3">}</div>
+  </div>
+</div>
+`;
+
+/** An older React layout where each line is one row containing both number and code. */
+export const REACT_BLOB_PAIRED_ROWS = `
 <div data-testid="code-view" data-path="src/calculator.ts">
   <div class="react-code-lines">
     <div class="react-code-line-container">
