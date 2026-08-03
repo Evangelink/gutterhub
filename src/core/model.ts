@@ -45,6 +45,7 @@ export interface CoverageSummary {
   percent: number | null;
 }
 
+// Verification branch: exercises the pull request diff adapter end to end.
 export function lineStatus(line: LineCoverage): LineStatus {
   if (line.hits !== null && line.hits <= 0) {
     return 'uncovered';
