@@ -3,7 +3,7 @@
  *
  * It drives real github.com with the built extension, so it needs network access. `npm run
  * e2e` runs it alongside the offline gate, which keeps the scheduled workflow a genuine
- * canary; `npm run e2e:offline` skips it. Point it at a diff too with
+ * canary; `npm run e2e:offline` skips it. Override the stable diff fixture with
  * `GUTTERHUB_E2E_PR=<pull request files url>`.
  *
  * Note on Firefox: this suite is Chromium-only. Playwright can load an unpacked extension
@@ -16,7 +16,9 @@ import { coverageReport, mutationReport } from './fixtures/reports.js';
 
 const FILE_PATH = 'src/core/model.ts';
 const BLOB_URL = `https://github.com/${REPOSITORY}/blob/main/${FILE_PATH}`;
-const PR_URL = process.env['GUTTERHUB_E2E_PR'] ?? '';
+// A closed PR remains a stable live diff fixture without requiring a branch to be kept alive.
+const PR_URL =
+  process.env['GUTTERHUB_E2E_PR'] ?? 'https://github.com/Evangelink/gutterhub/pull/1/files';
 
 const coverage = () => coverageReport({ path: FILE_PATH });
 const mutation = () => mutationReport({ path: FILE_PATH });
@@ -98,8 +100,6 @@ test('file view: coverage, mutation, and both overlaid', async ({ gutterhub }) =
 });
 
 test('pull request diff', async ({ gutterhub }) => {
-  test.skip(PR_URL === '', 'set GUTTERHUB_E2E_PR to a pull request files URL to run this');
-
   await gutterhub.seed([coverage()]);
   const page = await gutterhub.open(PR_URL);
   const diff = await page.evaluate(() => {
