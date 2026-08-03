@@ -75,20 +75,80 @@ function writeCache(key: string, entry: CacheEntry): void {
   }
 }
 
-/** Determines the commit whose coverage should be shown. */
+/** A full commit SHA, as opposed to a branch, tag or abbreviated ref. */
+const FULL_SHA = /^[0-9a-f]{40}$/i;
+
+/**
+ * Resolved refs, so that browsing several files on one branch costs one API call rather
+ * than one per navigation. Unauthenticated users get 60 GitHub API calls an hour, which a
+ * per-page lookup would burn through quickly.
+ */
+const refCache = new Map<string, { sha: string; storedAt: number }>();
+const REF_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function resolveRef(context: PageContext, api: GitHubApi, ref: string): Promise<string> {
+  if (FULL_SHA.test(ref)) {
+    return ref;
+  }
+
+  const key = `${context.host}|${repositoryKey(context)}|${ref}`;
+  const cached = refCache.get(key);
+  if (cached && Date.now() - cached.storedAt < REF_CACHE_TTL_MS) {
+    return cached.sha;
+  }
+
+  const sha = await api.commitSha(context.owner, context.repo, ref);
+  refCache.set(key, { sha, storedAt: Date.now() });
+  return sha;
+}
+
+/**
+ * Whether any configured source actually needs a commit SHA.
+ *
+ * Resolving a branch ref costs a GitHub API call, and unauthenticated users get 60 an
+ * hour. A hand-uploaded report needs no commit at all, and a URL template needs one only
+ * if it interpolates it — so resolution is lazy rather than on every page load. Doing it
+ * eagerly would also make an upload-only setup fail outright without a token.
+ */
+/** @internal Exported for testing. */
+export function needsCommitSha(sources: readonly CoverageSource[]): boolean {
+  return sources.some((source) => {
+    switch (source.kind) {
+      case 'github-actions':
+      case 'azure-devops':
+        return true;
+      case 'url-template':
+        return /\{(sha|shortSha)\}/.test(source.template);
+      case 'manual':
+        return false;
+    }
+  });
+}
+
+/**
+ * Determines the commit whose reports should be shown.
+ *
+ * Everything artifact-based matches builds on a commit SHA, so a ref that is not already
+ * one has to be resolved. A `/blob/main/...` URL carries the branch name, and passing
+ * that through as if it were a commit makes those sources silently find nothing. The
+ * branch is kept separately for URL templates that want it.
+ */
 async function resolveSha(
   context: PageContext,
   api: GitHubApi,
+  sources: readonly CoverageSource[],
 ): Promise<{ sha: string; branch?: string }> {
+  const resolve = async (ref: string): Promise<string> =>
+    needsCommitSha(sources) ? resolveRef(context, api, ref) : ref;
+
   switch (context.kind) {
     case 'commit':
-      return { sha: context.commitSha! };
+      // Commit URLs are usually full SHAs, but GitHub accepts abbreviated ones too.
+      return { sha: await resolve(context.commitSha!) };
 
     case 'blob': {
       const ref = context.ref!;
-      // A blob URL can carry either a SHA or a branch name; only the former is usable
-      // as-is, and resolving a branch needs no extra call because the ref doubles as one.
-      return /^[0-9a-f]{40}$/i.test(ref) ? { sha: ref } : { sha: ref, branch: ref };
+      return FULL_SHA.test(ref) ? { sha: ref } : { sha: await resolve(ref), branch: ref };
     }
 
     case 'pull-request-files': {
@@ -124,7 +184,7 @@ async function handleResolve(request: ResolveCoverageRequest): Promise<ResolveCo
   const api = new GitHubApi(request.context.host, settings.githubToken);
 
   try {
-    const { sha, branch } = await resolveSha(request.context, api);
+    const { sha, branch } = await resolveSha(request.context, api, config.sources);
 
     const reports: ResolvedReport[] = [];
     const warnings: string[] = [];
@@ -220,6 +280,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (isMessage(message, 'gutterhub:invalidate')) {
     cache.clear();
+    refCache.clear();
     sendResponse({ ok: true });
     return false;
   }
@@ -228,7 +289,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 // Configuration changes can invalidate every cached report, and stale coverage is worse
-// than none because it looks authoritative.
+// than none because it looks authoritative. The resolved-ref cache goes too, so a forced
+// refresh genuinely re-reads the branch rather than reusing a commit that has moved on.
 chrome.storage.onChanged.addListener(() => {
   cache.clear();
+  refCache.clear();
 });
