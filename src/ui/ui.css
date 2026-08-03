@@ -200,7 +200,7 @@ button:disabled {
   vertical-align: middle;
 }
 
-.legend .covered::before {
+.legend .good::before {
   background: var(--gh-success);
 }
 
@@ -208,7 +208,7 @@ button:disabled {
   background: var(--gh-attention);
 }
 
-.legend .uncovered::before {
+.legend .bad::before {
   background: var(--gh-danger);
 }
 

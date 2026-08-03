@@ -1,4 +1,7 @@
-import type { FileCoverage } from './model.js';
+/** Anything that can be located by a path from a report. */
+export interface PathedRecord {
+  path: string;
+}
 
 export interface PathMatchOptions {
   /**
@@ -15,11 +18,11 @@ export interface PathMatchOptions {
   ignoreCase?: boolean;
 }
 
-export interface PathMatch {
-  file: FileCoverage;
+export interface PathMatch<T extends PathedRecord> {
+  file: T;
   /** Number of trailing path segments shared with the requested repository path. */
   score: number;
-  /** True when more than one coverage entry matched equally well. */
+  /** True when more than one entry matched equally well. */
   ambiguous: boolean;
 }
 
@@ -71,28 +74,31 @@ export function commonSuffixSegments(a: readonly string[], b: readonly string[])
   return count;
 }
 
-interface IndexedFile {
-  file: FileCoverage;
+interface IndexedFile<T extends PathedRecord> {
+  file: T;
   segments: string[];
   /** Lower-cased segments, used by the case-insensitive fallback. */
   foldedSegments: string[];
 }
 
 /**
- * Resolves repository paths onto coverage entries.
+ * Resolves repository paths onto report entries.
  *
- * Coverage reports are wildly inconsistent about how they spell paths — absolute CI
- * workspace paths, paths relative to a project directory, or bare file names — so an
- * exact lookup is not workable. Entries are indexed by file name and the candidate
- * sharing the longest trailing run of segments wins.
+ * Reports are wildly inconsistent about how they spell paths — absolute CI workspace
+ * paths, paths relative to a project directory, or bare file names — so an exact lookup
+ * is not workable. Entries are indexed by file name and the candidate sharing the longest
+ * trailing run of segments wins.
+ *
+ * Nothing here is coverage-specific: any report kind whose entries carry a `path` reuses
+ * it unchanged.
  */
-export class CoveragePathIndex {
+export class PathIndex<T extends PathedRecord> {
   /** Keyed by lower-cased file name so that both match passes share one bucket lookup. */
-  private readonly byFileName = new Map<string, IndexedFile[]>();
+  private readonly byFileName = new Map<string, IndexedFile<T>[]>();
   private readonly ignoreCase: boolean;
   private count = 0;
 
-  constructor(files: readonly FileCoverage[], options: PathMatchOptions = {}) {
+  constructor(files: readonly T[], options: PathMatchOptions = {}) {
     this.ignoreCase = options.ignoreCase ?? false;
 
     const stripPrefix = options.stripPrefix ? normalisePath(options.stripPrefix) : '';
@@ -123,7 +129,7 @@ export class CoveragePathIndex {
         continue;
       }
 
-      const entry: IndexedFile = {
+      const entry: IndexedFile<T> = {
         file,
         segments,
         foldedSegments: segments.map((segment) => segment.toLowerCase()),
@@ -140,12 +146,12 @@ export class CoveragePathIndex {
     }
   }
 
-  /** Number of coverage entries in the index. */
+  /** Number of entries in the index. */
   get size(): number {
     return this.count;
   }
 
-  match(repositoryPath: string): PathMatch | null {
+  match(repositoryPath: string): PathMatch<T> | null {
     const segments = segmentsOf(normalisePath(repositoryPath));
     const fileName = segments[segments.length - 1];
     if (fileName === undefined) {
@@ -170,17 +176,17 @@ export class CoveragePathIndex {
     return bestMatch(bucket, folded, (entry) => entry.foldedSegments);
   }
 
-  lookup(repositoryPath: string): FileCoverage | null {
+  lookup(repositoryPath: string): T | null {
     return this.match(repositoryPath)?.file ?? null;
   }
 }
 
-function bestMatch(
-  bucket: readonly IndexedFile[],
+function bestMatch<T extends PathedRecord>(
+  bucket: readonly IndexedFile<T>[],
   segments: readonly string[],
-  select: (entry: IndexedFile) => string[],
-): PathMatch | null {
-  let best: IndexedFile | null = null;
+  select: (entry: IndexedFile<T>) => string[],
+): PathMatch<T> | null {
+  let best: IndexedFile<T> | null = null;
   let bestScore = 0;
   let ambiguous = false;
 

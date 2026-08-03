@@ -28,7 +28,11 @@ been published to the extension stores yet — install it unpacked (below).
 Coveralls, SonarQube Cloud, Codacy and Qlty ship no browser extension at all — their
 line-level views live inside their own web UI.
 
-## Supported report formats
+## Supported reports
+
+**Coverage** — green, amber or red per line. Branch data is used where the format
+provides it, so a line that ran but never took one of its branches shows amber rather
+than being passed off as covered.
 
 | Format                                    | Produced by                                                                                 |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -36,10 +40,19 @@ line-level views live inside their own web UI.
 | **Cobertura XML**                         | `coverlet`, `dotnet-coverage`, `pytest-cov`, JaCoCo (via converter), `gocover-cobertura`, … |
 | **Istanbul JSON** (`coverage-final.json`) | `nyc`, Jest, Vitest                                                                         |
 
-Branch data is used where the format provides it, so a line that ran but never took one of
-its branches is shown in amber rather than being passed off as covered.
+**Mutation testing** — the same three colours, meaning killed, partly killed and
+survived. Amber is the interesting one here: a line where only some mutants were caught
+is code that line coverage happily reports as fully covered.
 
-## Where the coverage comes from
+| Format                               | Produced by                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| **`mutation-testing-elements` JSON** | Stryker (JS/TS), Stryker.NET (C#), Stryker4s (Scala), PIT (Java, via converter) |
+
+The report kind is detected from the payload, so there is nothing extra to configure:
+point GutterHub at a mutation report instead of a coverage one and the overlay relabels
+itself.
+
+## Where the reports come from
 
 Pick one per repository:
 
@@ -117,7 +130,7 @@ Icons are generated, not committed as opaque binaries: `node scripts/generate-ic
 ### Layout
 
 ```
-src/core/        report parsing, path matching, and coverage → renderable marks
+src/core/        report parsing, path matching, and reports → renderable marks
 src/providers/   where reports come from (Actions artifact, URL, manual)
 src/github/      page detection, DOM adapters, the renderer
 src/content/     orchestration: navigation, mutation handling, re-rendering
@@ -125,26 +138,28 @@ src/background/  fetching and caching, away from the page's CORS policy
 src/ui/          popup and options
 ```
 
-### Scope: a coverage product on a general engine
+### Scope: two producers on one engine
 
-Roughly three quarters of the code has no idea what coverage is. The DOM adapters, page
+Roughly three quarters of the code has no idea what it is drawing. The DOM adapters, page
 detection, navigation handling, path matching and the fetch/cache layer only ever deal in
-_"put a coloured mark and a tooltip on line N of file F"_. Coverage is one producer of
-those marks:
+_"put a coloured mark and a tooltip on line N of file F"_. Coverage and mutation testing
+are two producers of those marks:
 
 ```
-coverage report → parsers → FileCoverage → coverageMarks() → LineMark[] → renderer → DOM
-                            └─ coverage-specific ─┘          └────── knows nothing about coverage ──────┘
+coverage report ─┐
+                 ├─ parse ─→ AnalysedFile ─→ LineMark[] ─→ renderer ─→ DOM
+mutation report ─┘          └ kind-specific ┘  └──── knows nothing about either ────┘
 ```
 
 `src/github/` imports `LineMark` as a **type only**, so it has no runtime dependency on
-the coverage model at all. A second kind of annotation — mutation testing is the obvious
-one, since killed/survived/no-coverage maps straight onto the three visual states — would
-be a new producer of `LineMark`s, not a change to the renderer or the adapters.
+either domain model. Adding mutation testing needed a parser and a mark producer; the
+renderer, the DOM adapters and the content script were untouched apart from generic
+wiring — which is exactly what the end-to-end test now checks, on a live page, for both
+kinds.
 
-That seam exists because it was nearly free. There is deliberately **no plugin system**:
-a framework with one implementation is a maintenance burden with no users. The product is
-coverage, and the name says so, because extension discovery is keyword search.
+There is still deliberately **no plugin system**. Two producers is enough to know the
+shape is right; it is not enough to justify a registry. A third would be one more file
+alongside `src/core/mutation.ts`.
 
 ### On surviving GitHub's markup
 

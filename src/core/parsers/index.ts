@@ -4,18 +4,25 @@ import { looksLikeIstanbul, parseIstanbul } from './istanbul.js';
 import { looksLikeLcov, parseLcov } from './lcov.js';
 
 export { parseCobertura, parseIstanbul, parseLcov };
+export { parseMutation, looksLikeMutation } from './mutation.js';
 export type { CoberturaReport } from './cobertura.js';
+export type { FileMutation, Mutant, MutantStatus, MutationReport } from './mutation.js';
 
-export class UnknownCoverageFormatError extends Error {
+export class UnknownReportError extends Error {
   constructor(hint?: string) {
     super(
-      `Unrecognised coverage report format${hint ? ` (${hint})` : ''}. ` +
-        'GutterHub understands LCOV, Cobertura XML and Istanbul JSON.',
+      `Unrecognised report format${hint ? ` (${hint})` : ''}. ` +
+        'GutterHub understands LCOV, Cobertura XML and Istanbul JSON coverage, ' +
+        'and mutation-testing-elements JSON.',
     );
-    this.name = 'UnknownCoverageFormatError';
+    this.name = 'UnknownReportError';
   }
 }
 
+/**
+ * Identifies a *coverage* format. Returns null for anything else, including mutation
+ * reports — {@link detectKind} in `core/parse.ts` is the entry point that spans kinds.
+ */
 export function detectFormat(text: string, fileName?: string): CoverageFormat | null {
   // Content sniffing first: file names lie far more often than payloads do
   // (`coverage.xml` is Cobertura, JaCoCo, or Clover depending on the tool).
@@ -36,17 +43,14 @@ export function detectFormat(text: string, fileName?: string): CoverageFormat | 
   if (name.endsWith('.xml')) {
     return 'cobertura';
   }
-  if (name.endsWith('.json')) {
-    return 'istanbul';
-  }
 
+  // A bare `.json` is deliberately not assumed to be Istanbul: mutation reports are JSON
+  // too, and guessing wrong produces a confidently empty overlay.
   return null;
 }
 
 export function parseCoverage(text: string, fileName?: string): CoverageReport {
-  const format = detectFormat(text, fileName);
-
-  switch (format) {
+  switch (detectFormat(text, fileName)) {
     case 'lcov':
       return parseLcov(text);
     case 'cobertura':
@@ -54,6 +58,6 @@ export function parseCoverage(text: string, fileName?: string): CoverageReport {
     case 'istanbul':
       return parseIstanbul(text);
     default:
-      throw new UnknownCoverageFormatError(fileName);
+      throw new UnknownReportError(fileName);
   }
 }

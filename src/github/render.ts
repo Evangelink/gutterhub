@@ -16,9 +16,9 @@ const GUTTER_CLASS = 'gutterhub-gutter';
 const ROW_CLASS = 'gutterhub-row';
 
 const STATUS_CLASS: Record<MarkStatus, string> = {
-  covered: 'gutterhub-covered',
-  uncovered: 'gutterhub-uncovered',
+  good: 'gutterhub-good',
   partial: 'gutterhub-partial',
+  bad: 'gutterhub-bad',
 };
 
 const ALL_CLASSES = [
@@ -35,9 +35,9 @@ export interface RenderOptions {
 
 export interface RenderStats {
   annotated: number;
-  covered: number;
+  good: number;
   partial: number;
-  uncovered: number;
+  bad: number;
   /** Lines present in the view but carrying no mark. */
   unknown: number;
 }
@@ -76,7 +76,7 @@ export function renderBlock(
   marks: ReadonlyMap<number, LineMark>,
   options: RenderOptions,
 ): RenderStats {
-  const stats: RenderStats = { annotated: 0, covered: 0, partial: 0, uncovered: 0, unknown: 0 };
+  const stats: RenderStats = { annotated: 0, good: 0, partial: 0, bad: 0, unknown: 0 };
 
   for (const line of block.lines) {
     const mark = marks.get(line.number);
@@ -91,28 +91,22 @@ export function renderBlock(
     }
 
     stats.annotated++;
-    if (mark.status === 'covered') {
-      stats.covered++;
-    } else if (mark.status === 'partial') {
-      stats.partial++;
-    } else {
-      stats.uncovered++;
-    }
+    stats[mark.status]++;
   }
 
   return stats;
 }
 
 export function emptyStats(): RenderStats {
-  return { annotated: 0, covered: 0, partial: 0, uncovered: 0, unknown: 0 };
+  return { annotated: 0, good: 0, partial: 0, bad: 0, unknown: 0 };
 }
 
 export function addStats(a: RenderStats, b: RenderStats): RenderStats {
   return {
     annotated: a.annotated + b.annotated,
-    covered: a.covered + b.covered,
+    good: a.good + b.good,
     partial: a.partial + b.partial,
-    uncovered: a.uncovered + b.uncovered,
+    bad: a.bad + b.bad,
     unknown: a.unknown + b.unknown,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverageMarks } from '../src/core/marks.js';
+import { coverageAnalysis, coverageMarks } from '../src/core/coverage.js';
 import { parseLcov } from '../src/core/parsers/lcov.js';
 
 function marks(lcov: string, showPartial = true) {
@@ -7,11 +7,11 @@ function marks(lcov: string, showPartial = true) {
 }
 
 describe('coverageMarks', () => {
-  it('maps hit lines to covered and zero-hit lines to uncovered', () => {
+  it('maps hit lines to good and zero-hit lines to bad', () => {
     const result = marks('SF:a.ts\nDA:1,3\nDA:2,0\nend_of_record\n');
 
-    expect(result.get(1)!.status).toBe('covered');
-    expect(result.get(2)!.status).toBe('uncovered');
+    expect(result.get(1)!.status).toBe('good');
+    expect(result.get(2)!.status).toBe('bad');
   });
 
   it('emits no mark for lines the report never mentions', () => {
@@ -27,16 +27,14 @@ describe('coverageMarks', () => {
     expect(result.get(1)!.status).toBe('partial');
   });
 
-  it('folds partial into covered when the option is off', () => {
+  it('folds partial into good when the option is off', () => {
     const result = marks('SF:a.ts\nDA:1,4\nBRDA:1,0,0,4\nBRDA:1,0,1,-\nend_of_record\n', false);
 
-    expect(result.get(1)!.status).toBe('covered');
+    expect(result.get(1)!.status).toBe('good');
   });
 
-  it('keeps uncovered lines uncovered when partial display is off', () => {
-    const result = marks('SF:a.ts\nDA:1,0\nend_of_record\n', false);
-
-    expect(result.get(1)!.status).toBe('uncovered');
+  it('keeps uncovered lines bad when partial display is off', () => {
+    expect(marks('SF:a.ts\nDA:1,0\nend_of_record\n', false).get(1)!.status).toBe('bad');
   });
 
   it('describes the hit count', () => {
@@ -76,5 +74,27 @@ describe('coverageMarks', () => {
 
   it('produces nothing for a file with no line data', () => {
     expect(coverageMarks({ path: 'a.ts', lines: new Map() }, { showPartial: true }).size).toBe(0);
+  });
+});
+
+describe('coverageAnalysis', () => {
+  const analysis = coverageAnalysis(
+    parseLcov('SF:src/a.ts\nDA:1,1\nDA:2,0\nDA:3,1\nend_of_record\n'),
+  );
+
+  it('reports its kind', () => {
+    expect(analysis.kind).toBe('coverage');
+  });
+
+  it('exposes one analysed file per report entry', () => {
+    expect(analysis.files.map((file) => file.path)).toEqual(['src/a.ts']);
+  });
+
+  it('summarises the whole file as a percentage', () => {
+    expect(analysis.files[0]!.summary()).toEqual({ percent: (2 / 3) * 100, label: 'covered' });
+  });
+
+  it('produces marks honouring the display option', () => {
+    expect(analysis.files[0]!.marks({ showPartial: true }).size).toBe(3);
   });
 });

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { collectFileBlocks } from '../src/github/adapters/index.js';
 import { parseLocation } from '../src/github/location.js';
 import { clearBlock, renderBlock } from '../src/github/render.js';
-import { coverageMarks, type LineMark } from '../src/core/marks.js';
+import type { LineMark } from '../src/core/marks.js';
+import { coverageMarks } from '../src/core/coverage.js';
 import { parseLcov } from '../src/core/parsers/lcov.js';
 import { LEGACY_BLOB, LEGACY_UNIFIED_DIFF } from './fixtures/github-markup.js';
 
@@ -32,8 +33,8 @@ describe('renderBlock', () => {
 
     renderBlock(block, marks('SF:a.ts\nDA:1,3\nDA:2,0\nend_of_record\n'), OPTIONS);
 
-    expect(block.lines[0]!.gutter.classList.contains('gutterhub-covered')).toBe(true);
-    expect(block.lines[1]!.gutter.classList.contains('gutterhub-uncovered')).toBe(true);
+    expect(block.lines[0]!.gutter.classList.contains('gutterhub-good')).toBe(true);
+    expect(block.lines[1]!.gutter.classList.contains('gutterhub-bad')).toBe(true);
   });
 
   it('leaves lines with no mark untouched', () => {
@@ -62,11 +63,7 @@ describe('renderBlock', () => {
   it('renders whatever tooltip the mark carries', () => {
     const block = blobBlock();
 
-    renderBlock(
-      block,
-      new Map([[1, { line: 1, status: 'covered', tooltip: 'anything' }]]),
-      OPTIONS,
-    );
+    renderBlock(block, new Map([[1, { line: 1, status: 'good', tooltip: 'anything' }]]), OPTIONS);
 
     expect(block.lines[0]!.gutter.getAttribute('title')).toBe('anything');
   });
@@ -88,7 +85,7 @@ describe('renderBlock', () => {
       OPTIONS,
     );
 
-    expect(stats).toEqual({ annotated: 3, covered: 1, partial: 1, uncovered: 1, unknown: 0 });
+    expect(stats).toEqual({ annotated: 3, good: 1, partial: 1, bad: 1, unknown: 0 });
   });
 
   it('is idempotent, so repeated renders do not accumulate classes', () => {
@@ -108,7 +105,7 @@ describe('renderBlock', () => {
     renderBlock(block, marks('SF:a.ts\nDA:1,0\nend_of_record\n'), OPTIONS);
     renderBlock(block, marks('SF:a.ts\nDA:1,9\nend_of_record\n'), OPTIONS);
 
-    expect(block.lines[0]!.gutter.classList.contains('gutterhub-covered')).toBe(true);
+    expect(block.lines[0]!.gutter.classList.contains('gutterhub-good')).toBe(true);
   });
 
   it('annotates only the file it was given in a multi-file diff', () => {
@@ -129,14 +126,14 @@ describe('renderBlock', () => {
     renderBlock(
       block,
       new Map<number, LineMark>([
-        [1, { line: 1, status: 'covered', tooltip: 'Mutant killed' }],
-        [2, { line: 2, status: 'uncovered', tooltip: 'Mutant survived' }],
+        [1, { line: 1, status: 'good', tooltip: 'Mutant killed' }],
+        [2, { line: 2, status: 'bad', tooltip: 'Mutant survived' }],
       ]),
       OPTIONS,
     );
 
     expect(block.lines[0]!.gutter.getAttribute('title')).toBe('Mutant killed');
-    expect(block.lines[1]!.gutter.classList.contains('gutterhub-uncovered')).toBe(true);
+    expect(block.lines[1]!.gutter.classList.contains('gutterhub-bad')).toBe(true);
   });
 });
 

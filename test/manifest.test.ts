@@ -26,7 +26,7 @@ describe('store metadata', () => {
     // Store discovery is keyword search; a brand-only name is invisible.
     const haystack = `${NAME} ${DESCRIPTION}`.toLowerCase();
 
-    for (const keyword of ['coverage', 'github', 'lcov', 'cobertura']) {
+    for (const keyword of ['coverage', 'github', 'mutation', 'lcov', 'cobertura']) {
       expect(haystack).toContain(keyword);
     }
   });

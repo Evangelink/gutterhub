@@ -1,3 +1,4 @@
+import type { ReportKind } from '../core/analysis.js';
 import type { PageContext } from '../github/location.js';
 
 export interface ResolveCoverageRequest {
@@ -37,12 +38,14 @@ export interface OverlayStatus {
   hint?: string;
   /** Origin of the report, shown so users can confirm what was loaded. */
   label?: string;
+  /** Which kind of report is on screen, so the UI can label the states correctly. */
+  kind?: ReportKind;
   repositoryKey?: string;
   adapterId?: string;
   annotated?: number;
-  covered?: number;
+  good?: number;
   partial?: number;
-  uncovered?: number;
+  bad?: number;
   filesMatched?: number;
   filesTotal?: number;
 }

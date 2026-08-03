@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CoveragePathIndex, commonSuffixSegments, normalisePath } from '../src/core/pathMatch.js';
+import { PathIndex, commonSuffixSegments, normalisePath } from '../src/core/pathMatch.js';
 import type { FileCoverage } from '../src/core/model.js';
 
 function file(path: string): FileCoverage {
@@ -40,27 +40,27 @@ describe('commonSuffixSegments', () => {
   });
 });
 
-describe('CoveragePathIndex', () => {
+describe('PathIndex', () => {
   it('matches an absolute CI path against a repository-relative path', () => {
-    const index = new CoveragePathIndex([file('/home/runner/work/repo/repo/src/app.ts')]);
+    const index = new PathIndex([file('/home/runner/work/repo/repo/src/app.ts')]);
 
     expect(index.lookup('src/app.ts')?.path).toBe('/home/runner/work/repo/repo/src/app.ts');
   });
 
   it('matches a Windows agent path', () => {
-    const index = new CoveragePathIndex([file('D:\\a\\1\\s\\src\\Calc.cs')]);
+    const index = new PathIndex([file('D:\\a\\1\\s\\src\\Calc.cs')]);
 
     expect(index.lookup('src/Calc.cs')).not.toBeNull();
   });
 
   it('matches when the coverage path is shorter than the repository path', () => {
-    const index = new CoveragePathIndex([file('Calc.cs')]);
+    const index = new PathIndex([file('Calc.cs')]);
 
     expect(index.lookup('src/deep/Calc.cs')).not.toBeNull();
   });
 
   it('returns null for a file the report does not mention', () => {
-    const index = new CoveragePathIndex([file('src/app.ts')]);
+    const index = new PathIndex([file('src/app.ts')]);
 
     expect(index.lookup('src/other.ts')).toBeNull();
   });
@@ -68,37 +68,37 @@ describe('CoveragePathIndex', () => {
   it('rejects a same-named file living under a different directory', () => {
     // `a/b/Foo.cs` and `x/b/Foo.cs` share two trailing segments but neither path is
     // fully consumed, so painting one with the other's coverage would be wrong.
-    const index = new CoveragePathIndex([file('a/b/Foo.cs')]);
+    const index = new PathIndex([file('a/b/Foo.cs')]);
 
     expect(index.lookup('x/b/Foo.cs')).toBeNull();
   });
 
   it('prefers the longest matching suffix when several candidates share a name', () => {
-    const index = new CoveragePathIndex([file('Utils.cs'), file('src/core/Utils.cs')]);
+    const index = new PathIndex([file('Utils.cs'), file('src/core/Utils.cs')]);
 
     expect(index.lookup('src/core/Utils.cs')?.path).toBe('src/core/Utils.cs');
   });
 
   it('flags an ambiguous match between indistinguishable candidates', () => {
-    const index = new CoveragePathIndex([file('one/Utils.cs'), file('two/Utils.cs')]);
+    const index = new PathIndex([file('one/Utils.cs'), file('two/Utils.cs')]);
 
     expect(index.match('Utils.cs')?.ambiguous).toBe(true);
   });
 
   it('does not flag a single clear winner as ambiguous', () => {
-    const index = new CoveragePathIndex([file('src/core/Utils.cs'), file('Other.cs')]);
+    const index = new PathIndex([file('src/core/Utils.cs'), file('Other.cs')]);
 
     expect(index.match('src/core/Utils.cs')?.ambiguous).toBe(false);
   });
 
   it('reports the number of matched segments', () => {
-    const index = new CoveragePathIndex([file('/build/src/core/Utils.cs')]);
+    const index = new PathIndex([file('/build/src/core/Utils.cs')]);
 
     expect(index.match('src/core/Utils.cs')?.score).toBe(3);
   });
 
   it('strips a configured prefix from coverage paths', () => {
-    const index = new CoveragePathIndex([file('packages/app/src/main.ts')], {
+    const index = new PathIndex([file('packages/app/src/main.ts')], {
       stripPrefix: 'packages/app',
     });
 
@@ -106,34 +106,34 @@ describe('CoveragePathIndex', () => {
   });
 
   it('adds a configured prefix to coverage paths', () => {
-    const index = new CoveragePathIndex([file('src/main.ts')], { addPrefix: 'packages/app' });
+    const index = new PathIndex([file('src/main.ts')], { addPrefix: 'packages/app' });
 
     expect(index.match('packages/app/src/main.ts')?.score).toBe(4);
   });
 
   it('matches case-insensitively when asked', () => {
-    const index = new CoveragePathIndex([file('SRC/App.TS')], { ignoreCase: true });
+    const index = new PathIndex([file('SRC/App.TS')], { ignoreCase: true });
 
     expect(index.lookup('src/app.ts')).not.toBeNull();
   });
 
   it('still resolves a case-mismatched file name without the option', () => {
-    const index = new CoveragePathIndex([file('src/App.cs')]);
+    const index = new PathIndex([file('src/App.cs')]);
 
     expect(index.lookup('src/app.cs')).not.toBeNull();
   });
 
   it('exposes how many files were indexed', () => {
-    expect(new CoveragePathIndex([file('a.ts'), file('b/a.ts')]).size).toBe(2);
+    expect(new PathIndex([file('a.ts'), file('b/a.ts')]).size).toBe(2);
   });
 
   it('drops entries that become empty after stripping', () => {
-    const index = new CoveragePathIndex([file('packages/app')], { stripPrefix: 'packages/app' });
+    const index = new PathIndex([file('packages/app')], { stripPrefix: 'packages/app' });
 
     expect(index.size).toBe(0);
   });
 
   it('returns null for an empty lookup path', () => {
-    expect(new CoveragePathIndex([file('a.ts')]).lookup('')).toBeNull();
+    expect(new PathIndex([file('a.ts')]).lookup('')).toBeNull();
   });
 });

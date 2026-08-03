@@ -1,3 +1,4 @@
+import { PRESENTATION } from '../core/analysis.js';
 import { parseLocation, repositoryKey } from '../github/location.js';
 import { loadManualReport, saveManualReport } from '../providers/manual.js';
 import type { OverlayStatus } from '../shared/messages.js';
@@ -26,6 +27,9 @@ const ui = {
   hint: element('status-hint'),
   source: element('status-source'),
   legend: element('legend'),
+  legendGood: element('legend-good'),
+  legendPartial: element('legend-partial'),
+  legendBad: element('legend-bad'),
   setup: element('setup'),
   kind: element<HTMLSelectElement>('source-kind'),
   artifactName: element<HTMLInputElement>('artifact-name'),
@@ -65,18 +69,25 @@ function showStatus(status: OverlayStatus): void {
   ui.hint.textContent = status.hint ?? '';
   ui.legend.hidden = status.state !== 'ready';
 
+  // Relabel the legend in the report's own vocabulary: green means "covered" for a
+  // coverage report but "killed" for a mutation one.
+  const presentation = PRESENTATION[status.kind ?? 'coverage'];
+  ui.legendGood.textContent = presentation.legend.good;
+  ui.legendPartial.textContent = presentation.legend.partial;
+  ui.legendBad.textContent = presentation.legend.bad;
+
   if (status.state === 'ready') {
     const parts = [
       `${status.annotated ?? 0} lines`,
-      `${status.covered ?? 0} covered`,
-      `${status.partial ?? 0} partial`,
-      `${status.uncovered ?? 0} uncovered`,
+      `${status.good ?? 0} ${presentation.legend.good}`,
+      `${status.partial ?? 0} ${presentation.legend.partial}`,
+      `${status.bad ?? 0} ${presentation.legend.bad}`,
       `${status.filesMatched ?? 0}/${status.filesTotal ?? 0} files matched`,
     ];
     ui.message.textContent = parts.join(' · ');
   }
 
-  ui.source.textContent = status.label ? `Source: ${status.label}` : '';
+  ui.source.textContent = status.label ? `${presentation.title} · ${status.label}` : '';
 }
 
 function applyKind(kind: CoverageSource['kind']): void {

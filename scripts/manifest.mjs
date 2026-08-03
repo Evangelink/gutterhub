@@ -11,14 +11,18 @@
  *
  * Extension discovery is almost entirely keyword search — people look for "code coverage
  * github", not for a brand they have never heard of. Both fields are indexed, so the name
- * carries the keywords and `short_name` keeps the brand where space is tight.
+ * carries the primary keyword and `short_name` keeps the brand where space is tight.
+ *
+ * Coverage stays in the name even though mutation testing is supported too: it is the
+ * term people search for, and diluting it for a secondary feature would cost more
+ * installs than the extra honesty gains. The description carries the full story.
  * Limits: Chrome allows 75 characters for the name and 132 for the description.
  */
 export const NAME = 'GutterHub — Code Coverage for GitHub';
 export const SHORT_NAME = 'GutterHub';
 export const DESCRIPTION =
-  'Line-by-line test coverage on GitHub pull requests, file views and commits. ' +
-  'Reads LCOV, Cobertura and Istanbul reports.';
+  'Test coverage and mutation testing, line by line, on GitHub pull requests, ' +
+  'file views and commits. LCOV, Cobertura, Stryker.';
 
 /** @param {{ version: string, target: 'chrome' | 'firefox' }} options */
 export function buildManifest({ version, target }) {

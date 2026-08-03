@@ -8,6 +8,10 @@ Discovery for a browser extension is almost entirely keyword search. Both the na
 description are indexed, so the name carries the keywords people actually type — _"code
 coverage github"_ — while `short_name` keeps the brand for places where space is tight.
 
+Coverage stays in the **name** even though mutation testing is supported too: it is the
+term people search for, and diluting it for a secondary feature would cost more installs
+than the extra precision gains. The description carries the full story.
+
 ## Name
 
 ```
@@ -17,7 +21,7 @@ GutterHub — Code Coverage for GitHub
 ## Short description
 
 ```
-Line-by-line test coverage on GitHub pull requests, file views and commits. Reads LCOV, Cobertura and Istanbul reports.
+Test coverage and mutation testing, line by line, on GitHub pull requests, file views and commits. LCOV, Cobertura, Stryker.
 ```
 
 ## Category
@@ -27,32 +31,44 @@ Developer Tools
 ## Full description
 
 ```
-See exactly which lines your tests cover, without leaving GitHub.
+See exactly which lines your tests cover — and which of them your tests would not
+notice breaking — without leaving GitHub.
 
 GutterHub draws a green, amber or red bar next to every line of code on pull request
 diffs, file views and commits — the same thing Azure DevOps shows natively for pull
 request code coverage, and what GitLab shows in its diff view.
 
-It is vendor-neutral. It reads the coverage reports your CI already produces, so there
-is no account to create, no service to sign up for, and your coverage is never uploaded
+It is vendor-neutral. It reads the reports your CI already produces, so there
+is no account to create, no service to sign up for, and your reports are never uploaded
 anywhere. Everything is fetched by the extension and stays on your machine.
 
 WHAT YOU GET
 
 • Coverage marks on every line, on pull request diffs, file views and commits
-• A per-file coverage percentage in diff headers
+• A per-file percentage in diff headers
 • Amber marks for lines that ran but never took one of their branches, so partially
   tested code stops hiding behind a green bar
 • Hover any line for its exact hit count and branch totals
+• Mutation testing results in the same gutters, when you point it at a mutation report
 
-SUPPORTED REPORT FORMATS
+SUPPORTED COVERAGE FORMATS
 
 • LCOV — lcov/gcov, Jest, Vitest, Karma, cargo-llvm-cov, Go via gcov2lcov
 • Cobertura XML — coverlet, dotnet-coverage, pytest-cov, JaCoCo via a converter,
   gocover-cobertura
 • Istanbul JSON — nyc, Jest, Vitest
 
-WHERE THE COVERAGE COMES FROM
+SUPPORTED MUTATION TESTING FORMATS
+
+• mutation-testing-elements JSON — Stryker (JS/TS), Stryker.NET (C#), Stryker4s
+  (Scala) and PIT (Java, via a converter)
+
+The same three colours then mean killed, partly killed and survived. Amber is the
+interesting one: a line where only some mutants were caught is code that line coverage
+happily reports as fully covered. The report kind is detected automatically, so there
+is nothing extra to configure.
+
+WHERE THE REPORTS COME FROM
 
 Choose one per repository:
 

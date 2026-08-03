@@ -12,11 +12,11 @@
   box-shadow: inset 4px 0 0 0 var(--gutterhub-color, transparent);
 }
 
-.gutterhub-gutter.gutterhub-covered {
+.gutterhub-gutter.gutterhub-good {
   --gutterhub-color: var(--fgColor-success, var(--color-success-fg, #1a7f37));
 }
 
-.gutterhub-gutter.gutterhub-uncovered {
+.gutterhub-gutter.gutterhub-bad {
   --gutterhub-color: var(--fgColor-danger, var(--color-danger-fg, #cf222e));
 }
 
@@ -24,11 +24,11 @@
   --gutterhub-color: var(--fgColor-attention, var(--color-attention-fg, #9a6700));
 }
 
-.gutterhub-row.gutterhub-highlight.gutterhub-covered {
+.gutterhub-row.gutterhub-highlight.gutterhub-good {
   background-color: var(--bgColor-success-muted, rgba(74, 194, 107, 0.12));
 }
 
-.gutterhub-row.gutterhub-highlight.gutterhub-uncovered {
+.gutterhub-row.gutterhub-highlight.gutterhub-bad {
   background-color: var(--bgColor-danger-muted, rgba(248, 81, 73, 0.12));
 }
 
@@ -41,11 +41,11 @@
  * itself has no visible effect. Tint the cells instead, while leaving the line-number
  * cells alone so the coverage bar stays legible.
  */
-tr.gutterhub-row.gutterhub-highlight.gutterhub-covered > td:not(.blob-num) {
+tr.gutterhub-row.gutterhub-highlight.gutterhub-good > td:not(.blob-num) {
   background-color: var(--bgColor-success-muted, rgba(74, 194, 107, 0.12));
 }
 
-tr.gutterhub-row.gutterhub-highlight.gutterhub-uncovered > td:not(.blob-num) {
+tr.gutterhub-row.gutterhub-highlight.gutterhub-bad > td:not(.blob-num) {
   background-color: var(--bgColor-danger-muted, rgba(248, 81, 73, 0.12));
 }
 

@@ -1,7 +1,6 @@
-import { summarise, type CoverageReport } from '../core/model.js';
-import { coverageMarks } from '../core/marks.js';
-import { parseCoverage } from '../core/parsers/index.js';
-import { CoveragePathIndex } from '../core/pathMatch.js';
+import type { AnalysedFile, FileSummary, ReportKind } from '../core/analysis.js';
+import { parseAnalysis } from '../core/parse.js';
+import { PathIndex } from '../core/pathMatch.js';
 import { collectFileBlocks } from '../github/adapters/index.js';
 import { parseLocation, repositoryKey, samePage, type PageContext } from '../github/location.js';
 import { addStats, clearBlock, emptyStats, renderBlock } from '../github/render.js';
@@ -10,15 +9,15 @@ import { loadSettings, repositoryConfig, type GlobalSettings } from '../shared/s
 
 const RENDER_DEBOUNCE_MS = 120;
 
-interface LoadedCoverage {
-  report: CoverageReport;
-  index: CoveragePathIndex;
+interface LoadedAnalysis {
+  kind: ReportKind;
+  index: PathIndex<AnalysedFile>;
   label: string;
   sha: string;
 }
 
 let currentContext: PageContext | null = null;
-let loaded: LoadedCoverage | null = null;
+let loaded: LoadedAnalysis | null = null;
 let settings: GlobalSettings | null = null;
 let status: OverlayStatus = { state: 'idle' };
 let renderTimer: number | undefined;
@@ -44,8 +43,8 @@ function badgeLevel(percent: number): 'good' | 'fair' | 'poor' {
   return percent >= 50 ? 'fair' : 'poor';
 }
 
-/** Adds a per-file coverage percentage next to the file name in a diff header. */
-function renderBadge(root: HTMLElement, percent: number | null): void {
+/** Adds a per-file headline figure next to the file name in a diff header. */
+function renderBadge(root: HTMLElement, summary: FileSummary | null): void {
   const header = root.querySelector<HTMLElement>(
     '.file-info, .file-header, [data-testid="file-header"]',
   );
@@ -54,17 +53,16 @@ function renderBadge(root: HTMLElement, percent: number | null): void {
   }
 
   const existing = header.querySelector<HTMLElement>('.gutterhub-badge');
-  if (percent === null) {
+  if (summary === null || summary.percent === null) {
     existing?.remove();
     return;
   }
 
-  const text = `${percent.toFixed(0)}% covered`;
   const badge = existing ?? document.createElement('span');
   badge.className = 'gutterhub-badge';
-  badge.dataset['level'] = badgeLevel(percent);
-  badge.textContent = text;
-  badge.title = 'Line coverage for this file, from GutterHub';
+  badge.dataset['level'] = badgeLevel(summary.percent);
+  badge.textContent = `${summary.percent.toFixed(0)}% ${summary.label}`;
+  badge.title = 'Whole-file figure for this report, from GutterHub';
 
   if (!existing) {
     header.appendChild(badge);
@@ -82,7 +80,7 @@ function render(): void {
   }
 
   const options = { highlightLines: settings.highlightLines };
-  const showPartial = settings.showPartial;
+  const markOptions = { showPartial: settings.showPartial };
 
   let stats = emptyStats();
   let matched = 0;
@@ -92,30 +90,31 @@ function render(): void {
       continue;
     }
 
-    const coverage = loaded.index.lookup(block.path);
-    if (!coverage) {
+    const file = loaded.index.lookup(block.path);
+    if (!file) {
       // Leave unmatched files completely untouched: a half-painted diff reads as
-      // "these lines are uncovered" rather than "no data for this file".
+      // "this code is untested" rather than "no data for this file".
       clearBlock(block.root);
       renderBadge(block.root, null);
       continue;
     }
 
     matched++;
-    stats = addStats(stats, renderBlock(block, coverageMarks(coverage, { showPartial }), options));
+    stats = addStats(stats, renderBlock(block, file.marks(markOptions), options));
     // The badge reports the whole file, not just the lines visible in a diff.
-    renderBadge(block.root, summarise(coverage).percent);
+    renderBadge(block.root, file.summary());
   }
 
   setStatus({
     state: stats.annotated > 0 ? 'ready' : 'empty',
     adapterId,
+    kind: loaded.kind,
     label: loaded.label,
     repositoryKey: repositoryKey(currentContext),
     annotated: stats.annotated,
-    covered: stats.covered,
+    good: stats.good,
     partial: stats.partial,
-    uncovered: stats.uncovered,
+    bad: stats.bad,
     filesMatched: matched,
     filesTotal: blocks.length,
     ...(stats.annotated === 0
@@ -215,10 +214,10 @@ async function load(force = false): Promise<void> {
   const config = repositoryConfig(settings, repositoryKey(context))!;
 
   try {
-    const report = parseCoverage(response.text, response.fileName);
+    const analysis = parseAnalysis(response.text, response.fileName);
     loaded = {
-      report,
-      index: new CoveragePathIndex(report.files, config.paths),
+      kind: analysis.kind,
+      index: new PathIndex(analysis.files, config.paths),
       label: response.label,
       sha: response.sha,
     };
@@ -228,7 +227,7 @@ async function load(force = false): Promise<void> {
     setStatus({
       state: 'error',
       repositoryKey: repositoryKey(context),
-      message: error instanceof Error ? error.message : 'Could not parse the coverage report.',
+      message: error instanceof Error ? error.message : 'Could not parse the report.',
     });
     return;
   }
