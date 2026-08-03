@@ -26,6 +26,12 @@ function config(key: string, sources: CoverageSource[], enabled = true): Reposit
 
 const actions: CoverageSource = { kind: 'github-actions', artifactName: 'coverage*' };
 const url: CoverageSource = { kind: 'url-template', template: 'https://ci/{owner}/{sha}.info' };
+/**
+ * A third, distinct source, so that the repository which must stay untouched never holds
+ * the same value as the one being written. Without that, a cross-repository write would
+ * be indistinguishable from correct behaviour.
+ */
+const manual: CoverageSource = { kind: 'manual' };
 
 describe('per-repository configuration', () => {
   it('keeps a separate source per repository', () => {
@@ -38,29 +44,39 @@ describe('per-repository configuration', () => {
   });
 
   it('does not disturb other repositories when one is updated', () => {
-    const before = settings(config('acme/widget', [actions]), config('other/thing', [url]));
+    // The untouched repository deliberately holds a source *different* from the one being
+    // written. If both held the same value, an implementation that assigned the new config
+    // to every repository would satisfy these assertions anyway.
+    const before = settings(config('acme/widget', [actions]), config('other/thing', [manual]));
 
     const after = withRepositoryConfig(before, config('acme/widget', [url]));
 
     expect(repositoryConfig(after, 'acme/widget')?.sources).toEqual([url]);
-    expect(repositoryConfig(after, 'other/thing')?.sources).toEqual([url]);
+    expect(repositoryConfig(after, 'other/thing')?.sources).toEqual([manual]);
     expect(Object.keys(after.repositories)).toHaveLength(2);
   });
 
   it('does not mutate the settings object it was given', () => {
-    const before = settings(config('acme/widget', [actions]));
+    const before = settings(config('acme/widget', [actions]), config('other/thing', [manual]));
 
     withRepositoryConfig(before, config('acme/widget', [url]));
 
     expect(repositoryConfig(before, 'acme/widget')?.sources).toEqual([actions]);
+    expect(repositoryConfig(before, 'other/thing')?.sources).toEqual([manual]);
   });
 
   it('adds a repository without touching the existing ones', () => {
-    const before = settings(config('acme/widget', [actions]));
+    const before = settings(config('acme/widget', [actions]), config('other/thing', [manual]));
 
     const after = withRepositoryConfig(before, config('new/repo', [url]));
 
-    expect(Object.keys(after.repositories).sort()).toEqual(['acme/widget', 'new/repo']);
+    expect(Object.keys(after.repositories).sort()).toEqual([
+      'acme/widget',
+      'new/repo',
+      'other/thing',
+    ]);
+    expect(repositoryConfig(after, 'acme/widget')?.sources).toEqual([actions]);
+    expect(repositoryConfig(after, 'other/thing')?.sources).toEqual([manual]);
   });
 
   it('looks a repository up regardless of the casing GitHub displays', () => {
