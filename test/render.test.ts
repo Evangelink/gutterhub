@@ -3,17 +3,18 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { collectFileBlocks } from '../src/github/adapters/index.js';
 import { parseLocation } from '../src/github/location.js';
 import { clearBlock, renderBlock } from '../src/github/render.js';
+import { coverageMarks, type LineMark } from '../src/core/marks.js';
 import { parseLcov } from '../src/core/parsers/lcov.js';
-import type { FileCoverage } from '../src/core/model.js';
 import { LEGACY_BLOB, LEGACY_UNIFIED_DIFF } from './fixtures/github-markup.js';
 
 const BLOB_CONTEXT = parseLocation('https://github.com/acme/widget/blob/main/src/calculator.ts')!;
 const PR_CONTEXT = parseLocation('https://github.com/acme/widget/pull/42/files')!;
 
-const OPTIONS = { highlightLines: true, showPartial: true };
+const OPTIONS = { highlightLines: true };
 
-function coverage(lcov: string): FileCoverage {
-  return parseLcov(lcov).files[0]!;
+/** Builds the marks the renderer consumes, from an LCOV snippet. */
+function marks(lcov: string, showPartial = true): Map<number, LineMark> {
+  return coverageMarks(parseLcov(lcov).files[0]!, { showPartial });
 }
 
 beforeEach(() => {
@@ -29,18 +30,18 @@ describe('renderBlock', () => {
   it('marks covered and uncovered lines distinctly', () => {
     const block = blobBlock();
 
-    renderBlock(block, coverage('SF:a.ts\nDA:1,3\nDA:2,0\nend_of_record\n'), OPTIONS);
+    renderBlock(block, marks('SF:a.ts\nDA:1,3\nDA:2,0\nend_of_record\n'), OPTIONS);
 
     expect(block.lines[0]!.gutter.classList.contains('gutterhub-covered')).toBe(true);
     expect(block.lines[1]!.gutter.classList.contains('gutterhub-uncovered')).toBe(true);
   });
 
-  it('leaves lines the report never mentions untouched', () => {
+  it('leaves lines with no mark untouched', () => {
     // Coverage tools only instrument executable lines. Painting blank lines, comments and
     // closing braces red would be actively misleading.
     const block = blobBlock();
 
-    const stats = renderBlock(block, coverage('SF:a.ts\nDA:1,1\nDA:2,1\nend_of_record\n'), OPTIONS);
+    const stats = renderBlock(block, marks('SF:a.ts\nDA:1,1\nDA:2,1\nend_of_record\n'), OPTIONS);
 
     expect(block.lines[2]!.gutter.className).not.toMatch(/gutterhub/);
     expect(stats.unknown).toBe(1);
@@ -51,61 +52,29 @@ describe('renderBlock', () => {
 
     renderBlock(
       block,
-      coverage('SF:a.ts\nDA:1,4\nBRDA:1,0,0,4\nBRDA:1,0,1,-\nend_of_record\n'),
+      marks('SF:a.ts\nDA:1,4\nBRDA:1,0,0,4\nBRDA:1,0,1,-\nend_of_record\n'),
       OPTIONS,
     );
 
     expect(block.lines[0]!.gutter.classList.contains('gutterhub-partial')).toBe(true);
   });
 
-  it('folds partial lines into covered when the option is off', () => {
-    const block = blobBlock();
-
-    renderBlock(block, coverage('SF:a.ts\nDA:1,4\nBRDA:1,0,0,4\nBRDA:1,0,1,-\nend_of_record\n'), {
-      ...OPTIONS,
-      showPartial: false,
-    });
-
-    expect(block.lines[0]!.gutter.classList.contains('gutterhub-covered')).toBe(true);
-    expect(block.lines[0]!.gutter.classList.contains('gutterhub-partial')).toBe(false);
-  });
-
-  it('describes hit counts in the tooltip', () => {
-    const block = blobBlock();
-
-    renderBlock(block, coverage('SF:a.ts\nDA:1,7\nend_of_record\n'), OPTIONS);
-
-    expect(block.lines[0]!.gutter.getAttribute('title')).toContain('7 hits');
-  });
-
-  it('says "1 hit" rather than "1 hits"', () => {
-    const block = blobBlock();
-
-    renderBlock(block, coverage('SF:a.ts\nDA:1,1\nend_of_record\n'), OPTIONS);
-
-    expect(block.lines[0]!.gutter.getAttribute('title')).toContain('1 hit');
-    expect(block.lines[0]!.gutter.getAttribute('title')).not.toContain('1 hits');
-  });
-
-  it('reports branch counts in the tooltip', () => {
+  it('renders whatever tooltip the mark carries', () => {
     const block = blobBlock();
 
     renderBlock(
       block,
-      coverage('SF:a.ts\nDA:1,4\nBRDA:1,0,0,4\nBRDA:1,0,1,-\nend_of_record\n'),
+      new Map([[1, { line: 1, status: 'covered', tooltip: 'anything' }]]),
       OPTIONS,
     );
 
-    expect(block.lines[0]!.gutter.getAttribute('title')).toContain('1/2 branches');
+    expect(block.lines[0]!.gutter.getAttribute('title')).toBe('anything');
   });
 
   it('tints the row only when line highlighting is on', () => {
     const block = blobBlock();
 
-    renderBlock(block, coverage('SF:a.ts\nDA:1,1\nend_of_record\n'), {
-      ...OPTIONS,
-      highlightLines: false,
-    });
+    renderBlock(block, marks('SF:a.ts\nDA:1,1\nend_of_record\n'), { highlightLines: false });
 
     expect(block.lines[0]!.row.classList.contains('gutterhub-highlight')).toBe(false);
   });
@@ -115,7 +84,7 @@ describe('renderBlock', () => {
 
     const stats = renderBlock(
       block,
-      coverage('SF:a.ts\nDA:1,1\nDA:2,0\nDA:3,5\nBRDA:3,0,0,5\nBRDA:3,0,1,-\nend_of_record\n'),
+      marks('SF:a.ts\nDA:1,1\nDA:2,0\nDA:3,5\nBRDA:3,0,0,5\nBRDA:3,0,1,-\nend_of_record\n'),
       OPTIONS,
     );
 
@@ -124,7 +93,7 @@ describe('renderBlock', () => {
 
   it('is idempotent, so repeated renders do not accumulate classes', () => {
     const block = blobBlock();
-    const report = coverage('SF:a.ts\nDA:1,1\nend_of_record\n');
+    const report = marks('SF:a.ts\nDA:1,1\nend_of_record\n');
 
     renderBlock(block, report, OPTIONS);
     const first = block.lines[0]!.gutter.className;
@@ -136,8 +105,8 @@ describe('renderBlock', () => {
   it('repaints when a line changes state between renders', () => {
     const block = blobBlock();
 
-    renderBlock(block, coverage('SF:a.ts\nDA:1,0\nend_of_record\n'), OPTIONS);
-    renderBlock(block, coverage('SF:a.ts\nDA:1,9\nend_of_record\n'), OPTIONS);
+    renderBlock(block, marks('SF:a.ts\nDA:1,0\nend_of_record\n'), OPTIONS);
+    renderBlock(block, marks('SF:a.ts\nDA:1,9\nend_of_record\n'), OPTIONS);
 
     expect(block.lines[0]!.gutter.classList.contains('gutterhub-covered')).toBe(true);
   });
@@ -146,17 +115,35 @@ describe('renderBlock', () => {
     document.body.innerHTML = LEGACY_UNIFIED_DIFF;
     const [calculator, untested] = collectFileBlocks(document, PR_CONTEXT).blocks;
 
-    renderBlock(calculator!, coverage('SF:a.ts\nDA:1,1\nDA:2,1\nDA:3,1\nend_of_record\n'), OPTIONS);
+    renderBlock(calculator!, marks('SF:a.ts\nDA:1,1\nDA:2,1\nDA:3,1\nend_of_record\n'), OPTIONS);
 
     expect(calculator!.root.querySelectorAll('.gutterhub-gutter').length).toBe(3);
     expect(untested!.root.querySelectorAll('.gutterhub-gutter').length).toBe(0);
+  });
+
+  it('draws marks that did not come from coverage at all', () => {
+    // The renderer is the seam: it understands marks, not coverage. A second kind of
+    // annotation is a new producer, not a change here.
+    const block = blobBlock();
+
+    renderBlock(
+      block,
+      new Map<number, LineMark>([
+        [1, { line: 1, status: 'covered', tooltip: 'Mutant killed' }],
+        [2, { line: 2, status: 'uncovered', tooltip: 'Mutant survived' }],
+      ]),
+      OPTIONS,
+    );
+
+    expect(block.lines[0]!.gutter.getAttribute('title')).toBe('Mutant killed');
+    expect(block.lines[1]!.gutter.classList.contains('gutterhub-uncovered')).toBe(true);
   });
 });
 
 describe('clearBlock', () => {
   it('removes every class and tooltip it added', () => {
     const block = blobBlock();
-    renderBlock(block, coverage('SF:a.ts\nDA:1,1\nDA:2,0\nend_of_record\n'), OPTIONS);
+    renderBlock(block, marks('SF:a.ts\nDA:1,1\nDA:2,0\nend_of_record\n'), OPTIONS);
 
     clearBlock(document);
 

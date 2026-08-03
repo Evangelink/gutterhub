@@ -1,4 +1,4 @@
-# GutterHub
+# GutterHub — Code Coverage for GitHub
 
 Line-by-line test coverage, drawn straight onto GitHub.
 
@@ -117,13 +117,34 @@ Icons are generated, not committed as opaque binaries: `node scripts/generate-ic
 ### Layout
 
 ```
-src/core/        report parsing and the path matching that maps reports onto repo paths
+src/core/        report parsing, path matching, and coverage → renderable marks
 src/providers/   where reports come from (Actions artifact, URL, manual)
 src/github/      page detection, DOM adapters, the renderer
 src/content/     orchestration: navigation, mutation handling, re-rendering
 src/background/  fetching and caching, away from the page's CORS policy
 src/ui/          popup and options
 ```
+
+### Scope: a coverage product on a general engine
+
+Roughly three quarters of the code has no idea what coverage is. The DOM adapters, page
+detection, navigation handling, path matching and the fetch/cache layer only ever deal in
+_"put a coloured mark and a tooltip on line N of file F"_. Coverage is one producer of
+those marks:
+
+```
+coverage report → parsers → FileCoverage → coverageMarks() → LineMark[] → renderer → DOM
+                            └─ coverage-specific ─┘          └────── knows nothing about coverage ──────┘
+```
+
+`src/github/` imports `LineMark` as a **type only**, so it has no runtime dependency on
+the coverage model at all. A second kind of annotation — mutation testing is the obvious
+one, since killed/survived/no-coverage maps straight onto the three visual states — would
+be a new producer of `LineMark`s, not a change to the renderer or the adapters.
+
+That seam exists because it was nearly free. There is deliberately **no plugin system**:
+a framework with one implementation is a maintenance burden with no users. The product is
+coverage, and the name says so, because extension discovery is keyword search.
 
 ### On surviving GitHub's markup
 
@@ -146,3 +167,5 @@ treats that as a design constraint rather than an accident:
 ## Licence
 
 [MIT](LICENSE)
+
+Store listing copy lives in [`docs/store-listing.md`](docs/store-listing.md).

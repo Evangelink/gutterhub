@@ -1,4 +1,5 @@
 import { summarise, type CoverageReport } from '../core/model.js';
+import { coverageMarks } from '../core/marks.js';
 import { parseCoverage } from '../core/parsers/index.js';
 import { CoveragePathIndex } from '../core/pathMatch.js';
 import { collectFileBlocks } from '../github/adapters/index.js';
@@ -80,10 +81,8 @@ function render(): void {
     return;
   }
 
-  const options = {
-    highlightLines: settings.highlightLines,
-    showPartial: settings.showPartial,
-  };
+  const options = { highlightLines: settings.highlightLines };
+  const showPartial = settings.showPartial;
 
   let stats = emptyStats();
   let matched = 0;
@@ -103,7 +102,8 @@ function render(): void {
     }
 
     matched++;
-    stats = addStats(stats, renderBlock(block, coverage, options));
+    stats = addStats(stats, renderBlock(block, coverageMarks(coverage, { showPartial }), options));
+    // The badge reports the whole file, not just the lines visible in a diff.
     renderBadge(block.root, summarise(coverage).percent);
   }
 

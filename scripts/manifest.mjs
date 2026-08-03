@@ -6,9 +6,19 @@
  * drift apart, both are generated from this one description.
  */
 
-export const NAME = 'GutterHub';
+/**
+ * Store name and description.
+ *
+ * Extension discovery is almost entirely keyword search — people look for "code coverage
+ * github", not for a brand they have never heard of. Both fields are indexed, so the name
+ * carries the keywords and `short_name` keeps the brand where space is tight.
+ * Limits: Chrome allows 75 characters for the name and 132 for the description.
+ */
+export const NAME = 'GutterHub — Code Coverage for GitHub';
+export const SHORT_NAME = 'GutterHub';
 export const DESCRIPTION =
-  'Show line-by-line test coverage directly on GitHub pull request diffs, file views and commits.';
+  'Line-by-line test coverage on GitHub pull requests, file views and commits. ' +
+  'Reads LCOV, Cobertura and Istanbul reports.';
 
 /** @param {{ version: string, target: 'chrome' | 'firefox' }} options */
 export function buildManifest({ version, target }) {
@@ -23,6 +33,7 @@ export function buildManifest({ version, target }) {
   const manifest = {
     manifest_version: 3,
     name: NAME,
+    short_name: SHORT_NAME,
     version,
     description: DESCRIPTION,
     homepage_url: 'https://github.com/Evangelink/gutterhub',
@@ -42,7 +53,7 @@ export function buildManifest({ version, target }) {
       },
     ],
     action: {
-      default_title: NAME,
+      default_title: SHORT_NAME,
       default_popup: 'popup.html',
       default_icon: icons,
     },

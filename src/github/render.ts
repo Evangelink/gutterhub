@@ -1,5 +1,13 @@
-import { lineStatus, type FileCoverage, type LineStatus } from '../core/model.js';
+import type { LineMark, MarkStatus } from '../core/marks.js';
 import type { CodeLine, FileBlock } from './adapters/index.js';
+
+/**
+ * Draws marks onto the page.
+ *
+ * This layer knows nothing about coverage — it takes `LineMark`s and paints them. Adding
+ * a second kind of annotation means writing a new producer of marks, not touching
+ * anything here or in the DOM adapters.
+ */
 
 /** Marks a node as processed so re-renders after DOM mutations stay cheap. */
 const STAMP_ATTRIBUTE = 'data-gutterhub';
@@ -7,7 +15,7 @@ const STAMP_ATTRIBUTE = 'data-gutterhub';
 const GUTTER_CLASS = 'gutterhub-gutter';
 const ROW_CLASS = 'gutterhub-row';
 
-const STATUS_CLASS: Record<LineStatus, string> = {
+const STATUS_CLASS: Record<MarkStatus, string> = {
   covered: 'gutterhub-covered',
   uncovered: 'gutterhub-uncovered',
   partial: 'gutterhub-partial',
@@ -21,9 +29,8 @@ const ALL_CLASSES = [
 ];
 
 export interface RenderOptions {
+  /** Tint the whole line, not just the gutter. */
   highlightLines: boolean;
-  /** When false, partially covered lines are painted as covered. */
-  showPartial: boolean;
 }
 
 export interface RenderStats {
@@ -31,35 +38,16 @@ export interface RenderStats {
   covered: number;
   partial: number;
   uncovered: number;
-  /** Lines present in the view but absent from the report (comments, blank lines, …). */
+  /** Lines present in the view but carrying no mark. */
   unknown: number;
 }
 
-function describe(status: LineStatus, hits: number | null, branches?: string): string {
-  const base =
-    status === 'covered'
-      ? 'Covered by tests'
-      : status === 'partial'
-        ? 'Partially covered — some branches never taken'
-        : 'Not covered by tests';
+function paint(line: CodeLine, mark: LineMark, options: RenderOptions): void {
+  line.gutter.classList.add(GUTTER_CLASS, STATUS_CLASS[mark.status]);
+  line.gutter.setAttribute('title', mark.tooltip);
+  line.gutter.setAttribute(STAMP_ATTRIBUTE, mark.status);
 
-  const parts = [base];
-  if (hits !== null) {
-    parts.push(hits === 1 ? '1 hit' : `${hits} hits`);
-  }
-  if (branches) {
-    parts.push(branches);
-  }
-
-  return parts.join(' · ');
-}
-
-function paint(line: CodeLine, status: LineStatus, title: string, options: RenderOptions): void {
-  line.gutter.classList.add(GUTTER_CLASS, STATUS_CLASS[status]);
-  line.gutter.setAttribute('title', title);
-  line.gutter.setAttribute(STAMP_ATTRIBUTE, status);
-
-  line.row.classList.add(ROW_CLASS, STATUS_CLASS[status]);
+  line.row.classList.add(ROW_CLASS, STATUS_CLASS[mark.status]);
   line.row.classList.toggle('gutterhub-highlight', options.highlightLines);
 }
 
@@ -79,43 +67,33 @@ export function clearBlock(root: ParentNode): void {
 /**
  * Paints one file block.
  *
- * Lines the report does not mention are left untouched rather than shown as uncovered:
- * coverage tools only instrument executable lines, so marking blank lines, comments and
- * declarations red would be actively misleading.
+ * Lines with no corresponding mark are left untouched rather than drawn in a "no data"
+ * state: a fully painted file where some lines simply were not instrumented reads as a
+ * problem with the code rather than an absence of information.
  */
 export function renderBlock(
   block: FileBlock,
-  coverage: FileCoverage,
+  marks: ReadonlyMap<number, LineMark>,
   options: RenderOptions,
 ): RenderStats {
   const stats: RenderStats = { annotated: 0, covered: 0, partial: 0, uncovered: 0, unknown: 0 };
 
   for (const line of block.lines) {
-    const entry = coverage.lines.get(line.number);
-    if (!entry) {
+    const mark = marks.get(line.number);
+    if (!mark) {
       stats.unknown++;
       continue;
     }
 
-    let status = lineStatus(entry);
-    if (status === 'partial' && !options.showPartial) {
-      status = 'covered';
-    }
-
-    const branches =
-      entry.branches !== undefined && entry.coveredBranches !== undefined
-        ? `${entry.coveredBranches}/${entry.branches} branches`
-        : undefined;
-
     // Repainting an unchanged line churns the DOM on every mutation callback.
-    if (line.gutter.getAttribute(STAMP_ATTRIBUTE) !== status) {
-      paint(line, status, describe(status, entry.hits, branches), options);
+    if (line.gutter.getAttribute(STAMP_ATTRIBUTE) !== mark.status) {
+      paint(line, mark, options);
     }
 
     stats.annotated++;
-    if (status === 'covered') {
+    if (mark.status === 'covered') {
       stats.covered++;
-    } else if (status === 'partial') {
+    } else if (mark.status === 'partial') {
       stats.partial++;
     } else {
       stats.uncovered++;
