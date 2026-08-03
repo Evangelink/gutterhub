@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { CoverageResolutionError, globMatch } from '../src/providers/types.js';
 import { expandTemplate } from '../src/providers/urlTemplate.js';
-import { chooseArtifact, readArchive } from '../src/providers/githubActions.js';
+import { chooseArtifact } from '../src/providers/githubActions.js';
+import { readArchive } from '../src/providers/archive.js';
 import type { WorkflowArtifact } from '../src/providers/githubApi.js';
 
 const LCOV = 'SF:src/a.ts\nDA:1,1\nend_of_record\n';
@@ -175,6 +176,61 @@ describe('readArchive', () => {
     expect(readArchive(zip, undefined).text).toBe(LCOV);
   });
 
+  it('finds a mutation report, not just coverage formats', () => {
+    // The shared reader is used by every artifact-based provider, so a mutation report
+    // sitting in an artifact must be recognised rather than silently skipped.
+    const mutation = JSON.stringify({
+      schemaVersion: '2.0',
+      thresholds: { high: 80, low: 60 },
+      files: {
+        'src/a.ts': {
+          language: 'typescript',
+          source: '//',
+          mutants: [
+            {
+              id: '1',
+              mutatorName: 'ConditionalExpression',
+              status: 'Survived',
+              location: { start: { line: 1, column: 1 }, end: { line: 1, column: 9 } },
+            },
+          ],
+        },
+      },
+    });
+
+    const zip = zipSync({
+      'build.log': strToU8('noise'),
+      'mutation-report.json': strToU8(mutation),
+    });
+
+    expect(readArchive(zip, undefined).name).toBe('mutation-report.json');
+  });
+
+  it('finds a mutation report even when the file name says nothing', () => {
+    const mutation = JSON.stringify({
+      schemaVersion: '2.0',
+      thresholds: {},
+      files: {
+        'a.ts': {
+          language: 'ts',
+          source: '//',
+          mutants: [
+            {
+              id: '1',
+              mutatorName: 'X',
+              status: 'Killed',
+              location: { start: { line: 2, column: 1 }, end: { line: 2, column: 4 } },
+            },
+          ],
+        },
+      },
+    });
+
+    const zip = zipSync({ 'results.dat': strToU8(mutation) });
+
+    expect(readArchive(zip, undefined).name).toBe('results.dat');
+  });
+
   it('reports what the archive held when the requested entry is absent', () => {
     const zip = zipSync({ 'lcov.info': strToU8(LCOV) });
 
@@ -184,10 +240,10 @@ describe('readArchive', () => {
     expect(error.hint).toContain('lcov.info');
   });
 
-  it('rejects an archive with no coverage report', () => {
+  it('rejects an archive with no report in it', () => {
     const zip = zipSync({ 'build.log': strToU8('nothing useful') });
 
-    expect(() => readArchive(zip, undefined)).toThrow(/No recognisable coverage report/);
+    expect(() => readArchive(zip, undefined)).toThrow(/No recognisable report/);
   });
 
   it('rejects an empty archive', () => {

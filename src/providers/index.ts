@@ -1,4 +1,5 @@
 import type { CoverageSource } from '../shared/settings.js';
+import { azureDevOpsProvider } from './azureDevOps.js';
 import { githubActionsProvider } from './githubActions.js';
 import { manualProvider } from './manual.js';
 import { urlTemplateProvider } from './urlTemplate.js';
@@ -14,10 +15,12 @@ export type { CoverageProvider, ResolveRequest, ResolvedCoverage } from './types
 export { expandTemplate, templateValues } from './urlTemplate.js';
 export { clearManualReport, loadManualReport, saveManualReport } from './manual.js';
 export { GitHubApi } from './githubApi.js';
+export { readArchive } from './archive.js';
 
 const PROVIDERS: readonly CoverageProvider[] = [
   urlTemplateProvider,
   githubActionsProvider,
+  azureDevOpsProvider,
   manualProvider,
 ];
 

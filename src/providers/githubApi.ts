@@ -117,6 +117,25 @@ export class GitHubApi {
     return { sha: pull.head.sha, branch: pull.head.ref };
   }
 
+  /**
+   * Resolves any ref — a branch, a tag, or a short SHA — to a full commit SHA.
+   *
+   * Artifact-based sources match builds on the commit, so a branch name taken straight
+   * from a `/blob/main/...` URL never matches anything and silently reports "no coverage".
+   */
+  async commitSha(owner: string, repo: string, ref: string): Promise<string> {
+    const commit = await this.getJson<{ sha?: string }>(
+      `/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}`,
+      `resolving "${ref}" to a commit`,
+    );
+
+    if (!commit.sha) {
+      throw new CoverageResolutionError(`Could not resolve "${ref}" to a commit.`);
+    }
+
+    return commit.sha;
+  }
+
   async workflowRuns(owner: string, repo: string, headSha: string): Promise<WorkflowRun[]> {
     const result = await this.getJson<{ workflow_runs?: WorkflowRun[] }>(
       `/repos/${owner}/${repo}/actions/runs?head_sha=${encodeURIComponent(headSha)}&per_page=50`,

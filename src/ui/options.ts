@@ -19,6 +19,7 @@ const ui = {
   highlightLines: element<HTMLInputElement>('highlight-lines'),
   showPartial: element<HTMLInputElement>('show-partial'),
   token: element<HTMLInputElement>('token'),
+  azureToken: element<HTMLInputElement>('azure-token'),
   enterpriseHosts: element<HTMLInputElement>('enterprise-hosts'),
   repoList: element('repo-list'),
   repoEmpty: element('repo-empty'),
@@ -36,6 +37,8 @@ function describeOneSource(source: CoverageSource): string {
   switch (source.kind) {
     case 'github-actions':
       return `Actions artifact “${source.artifactName}”`;
+    case 'azure-devops':
+      return `Azure DevOps ${source.organisation}/${source.project} › “${source.artifactName}”`;
     case 'url-template':
       return source.template || 'URL (not set)';
     case 'manual':
@@ -168,6 +171,7 @@ async function initialise(): Promise<void> {
   ui.highlightLines.checked = settings.highlightLines;
   ui.showPartial.checked = settings.showPartial;
   ui.token.value = settings.githubToken;
+  ui.azureToken.value = settings.azureToken;
   ui.enterpriseHosts.value = settings.enterpriseHosts.join(', ');
 
   renderRepositories();
@@ -192,6 +196,7 @@ ui.save.addEventListener('click', async () => {
       highlightLines: ui.highlightLines.checked,
       showPartial: ui.showPartial.checked,
       githubToken: ui.token.value.trim(),
+      azureToken: ui.azureToken.value.trim(),
       enterpriseHosts: hosts,
     });
 

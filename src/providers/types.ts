@@ -8,7 +8,10 @@ export interface ResolveRequest {
   sha: string;
   /** Branch name when known; used by URL templates. */
   branch?: string;
+  /** GitHub token, for the GitHub-backed sources. */
   token: string;
+  /** Azure DevOps token. A different credential for a different service. */
+  azureToken?: string;
 }
 
 export interface ResolvedCoverage {
