@@ -37,7 +37,11 @@ jobs:
         run: npm run build
 
       - name: Test against live GitHub
-        run: npm run e2e
+        # Only the live project. `npm run e2e` would also run the offline suite, whose
+        # failures have nothing to do with GitHub markup — and this job's failure opens
+        # an issue claiming exactly that, so the signal has to stay unambiguous. The
+        # offline suite gates pull requests in ci.yml instead.
+        run: npm run e2e:live
         env:
           GUTTERHUB_E2E_PR: ${{ inputs.pull_request_url }}
 
