@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
-import { azureDevOpsProvider, chooseArtifact } from '../src/providers/azureDevOps.js';
+import {
+  AZURE_ORIGINS,
+  azureDevOpsProvider,
+  buildCommits,
+  chooseArtifact,
+} from '../src/providers/azureDevOps.js';
 import { CoverageResolutionError } from '../src/providers/types.js';
 import { parseLocation } from '../src/github/location.js';
 import type { CoverageSource } from '../src/shared/settings.js';
@@ -43,6 +48,19 @@ function build(overrides: Record<string, unknown> = {}) {
     definition: { name: 'CI' },
     ...overrides,
   };
+}
+
+/**
+ * A pull request validation build: Azure records the synthetic merge commit in
+ * `sourceVersion`, and the head GitHub shows on the PR page in `triggerInfo`.
+ */
+function prBuild(headSha: string, overrides: Record<string, unknown> = {}) {
+  return build({
+    sourceVersion: 'ffffffffffffffffffffffffffffffffffffffff',
+    sourceBranch: 'refs/pull/42/merge',
+    triggerInfo: { 'pr.sourceSha': headSha, 'pr.number': '42' },
+    ...overrides,
+  });
 }
 
 function artifact(name: string) {
@@ -327,6 +345,93 @@ describe('azureDevOpsProvider', () => {
     await expect(azureDevOpsProvider.resolve({ kind: 'manual' }, request())).rejects.toThrow(
       /Wrong provider/,
     );
+  });
+});
+
+describe('pull request validation builds', () => {
+  it('matches a PR build on its head commit, not the merge commit', async () => {
+    // Azure records the synthetic merge commit in `sourceVersion`, while the GitHub PR
+    // page — and so `resolveSha` — reports the head of the PR branch. Matching only
+    // `sourceVersion` therefore misses every PR build, which is the case this provider
+    // most needs to serve.
+    mockFetch({
+      builds: { value: [prBuild(SHA)] },
+      artifacts: { value: [artifact('coverage')] },
+      zip: zipSync({ 'lcov.info': strToU8(LCOV) }),
+    });
+
+    const resolved = await azureDevOpsProvider.resolve(SOURCE, request());
+
+    expect(resolved.text).toBe(LCOV);
+  });
+
+  it('still matches an ordinary build on its source version', async () => {
+    mockFetch({
+      builds: { value: [build()] },
+      artifacts: { value: [artifact('coverage')] },
+      zip: zipSync({ 'lcov.info': strToU8(LCOV) }),
+    });
+
+    await expect(azureDevOpsProvider.resolve(SOURCE, request())).resolves.toBeDefined();
+  });
+
+  it('does not match a PR build for a different commit', async () => {
+    mockFetch({ builds: { value: [prBuild('a'.repeat(40))] } });
+
+    await expect(azureDevOpsProvider.resolve(SOURCE, request())).rejects.toThrow(
+      /No Azure DevOps build found/,
+    );
+  });
+
+  it('reports both candidate commits for a build', () => {
+    expect(buildCommits(prBuild(SHA))).toEqual(['ffffffffffffffffffffffffffffffffffffffff', SHA]);
+  });
+
+  it('reports just the source version when there is no trigger info', () => {
+    expect(buildCommits(build())).toEqual([SHA]);
+  });
+
+  it('ignores trigger info that carries no head commit', () => {
+    expect(buildCommits(build({ triggerInfo: { 'pr.number': '42' } }))).toEqual([SHA]);
+  });
+});
+
+describe('artifact download permissions', () => {
+  /** Stubs `chrome.permissions.contains` the way MV3 would answer. */
+  function stubPermissions(granted: boolean) {
+    vi.stubGlobal('chrome', { permissions: { contains: async () => granted } });
+  }
+
+  it('explains a missing host permission instead of failing opaquely', async () => {
+    // Artifacts are served from regional hosts rather than dev.azure.com, so a fetch to
+    // an ungranted origin fails at the MV3 host-permission boundary with nothing useful.
+    stubPermissions(false);
+    mockFetch({
+      builds: { value: [build()] },
+      artifacts: { value: [artifact('coverage')] },
+      zip: zipSync({ 'lcov.info': strToU8(LCOV) }),
+    });
+
+    const error = await failure(SOURCE, request());
+
+    expect(error.message).toMatch(/not allowed to download/);
+    expect(error.hint).toMatch(/press Save/i);
+  });
+
+  it('proceeds when the origin has been granted', async () => {
+    stubPermissions(true);
+    mockFetch({
+      builds: { value: [build()] },
+      artifacts: { value: [artifact('coverage')] },
+      zip: zipSync({ 'lcov.info': strToU8(LCOV) }),
+    });
+
+    await expect(azureDevOpsProvider.resolve(SOURCE, request())).resolves.toBeDefined();
+  });
+
+  it('covers the API host and the regional artifact hosts', () => {
+    expect(AZURE_ORIGINS).toContain('https://dev.azure.com/*');
+    expect(AZURE_ORIGINS).toContain('https://*.artifacts.visualstudio.com/*');
   });
 });
 

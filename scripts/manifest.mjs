@@ -49,7 +49,15 @@ export function buildManifest({ version, target }) {
     // extension look far more invasive than it is, so they are asked for only when a
     // user configures them. `dev.azure.com` is listed explicitly as well as being
     // covered by the wildcard, so the prompt a user sees names the actual service.
-    optional_host_permissions: ['https://dev.azure.com/*', 'https://*/*', 'http://*/*'],
+    optional_host_permissions: [
+      'https://dev.azure.com/*',
+      'https://*.dev.azure.com/*',
+      // Artifacts are served from regional hosts, not from dev.azure.com.
+      'https://*.artifacts.visualstudio.com/*',
+      'https://*.visualstudio.com/*',
+      'https://*/*',
+      'http://*/*',
+    ],
     content_scripts: [
       {
         matches: ['https://github.com/*'],

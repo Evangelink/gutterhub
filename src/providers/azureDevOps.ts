@@ -26,9 +26,37 @@ interface AzureBuild {
   buildNumber: string;
   status: string;
   result: string | null;
-  /** Commit the build ran against. This is what ties a build to the page being viewed. */
+  /**
+   * Commit the build ran against. For a pull request validation build this is the
+   * *synthetic merge* commit Azure creates, not the head of the PR branch.
+   */
   sourceVersion: string;
+  sourceBranch?: string;
+  /**
+   * Source-provider specific trigger data. For a GitHub pull request build this carries
+   * `pr.sourceSha`, which is the head commit GitHub shows on the PR page.
+   */
+  triggerInfo?: Record<string, string>;
   definition?: { name?: string };
+}
+
+/**
+ * Every commit a build can reasonably be said to be "for".
+ *
+ * A pull request validation build records the merge commit in `sourceVersion` while
+ * GitHub's PR page — and therefore `resolveSha` — reports the head of the PR branch.
+ * Matching on `sourceVersion` alone silently misses every PR build, which is the case
+ * this provider exists to serve.
+ */
+export function buildCommits(build: AzureBuild): string[] {
+  const commits = [build.sourceVersion];
+
+  const prHead = build.triggerInfo?.['pr.sourceSha'];
+  if (prHead) {
+    commits.push(prHead);
+  }
+
+  return commits.filter((commit): commit is string => Boolean(commit));
 }
 
 interface AzureArtifact {
@@ -59,6 +87,52 @@ function ensureOk(response: Response, what: string): void {
   if (response.status === 203 || !response.ok) {
     describeFailure(response.status, what);
   }
+}
+
+/**
+ * Origins the Azure DevOps source needs, beyond the API host itself.
+ *
+ * A build artifact's `downloadUrl` frequently points at a regional artifact service —
+ * `artprodcus3.artifacts.visualstudio.com` and friends — rather than `dev.azure.com`, and
+ * may redirect again. In MV3 a fetch to an origin the extension has not been granted
+ * fails at the host-permission boundary, before any of the response handling runs, so
+ * these have to be granted alongside the API host.
+ */
+export const AZURE_ORIGINS = [
+  'https://dev.azure.com/*',
+  'https://*.dev.azure.com/*',
+  'https://*.artifacts.visualstudio.com/*',
+  'https://*.visualstudio.com/*',
+];
+
+/**
+ * Checks that a download URL's origin has actually been granted, so that a missing
+ * permission is reported as such rather than surfacing as an opaque network error.
+ *
+ * `chrome.permissions` is absent in tests, in which case there is nothing to verify.
+ */
+async function ensureDownloadable(url: string): Promise<void> {
+  const permissions = (globalThis as { chrome?: typeof chrome }).chrome?.permissions;
+  if (!permissions?.contains) {
+    return;
+  }
+
+  let origin: string;
+  try {
+    origin = `${new URL(url).origin}/*`;
+  } catch {
+    return;
+  }
+
+  if (await permissions.contains({ origins: [origin] })) {
+    return;
+  }
+
+  throw new CoverageResolutionError(
+    `GutterHub is not allowed to download from ${new URL(url).host}.`,
+    'Azure DevOps serves artifacts from regional hosts. Open the GutterHub popup and ' +
+      'press Save to grant access, which has to be done from a click.',
+  );
 }
 
 function describeFailure(status: number, what: string): never {
@@ -133,7 +207,7 @@ async function findBuilds(
   );
 
   const builds = result.value ?? [];
-  const matching = builds.filter((build) => build.sourceVersion === sha);
+  const matching = builds.filter((build) => buildCommits(build).includes(sha));
 
   if (matching.length === 0) {
     throw new CoverageResolutionError(
@@ -218,9 +292,12 @@ export const azureDevOpsProvider: CoverageProvider = {
         continue;
       }
 
+      const downloadUrl = artifact.resource!.downloadUrl!;
+      await ensureDownloadable(downloadUrl);
+
       let archive: Response;
       try {
-        archive = await fetch(artifact.resource!.downloadUrl!, {
+        archive = await fetch(downloadUrl, {
           headers: authHeaders(token),
           credentials: 'omit',
         });

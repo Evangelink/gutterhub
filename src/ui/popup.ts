@@ -1,4 +1,5 @@
 import { PRESENTATION } from '../core/analysis.js';
+import { AZURE_ORIGINS } from '../providers/azureDevOps.js';
 import { parseLocation, repositoryKey } from '../github/location.js';
 import { loadManualReport, saveManualReport } from '../providers/manual.js';
 import type { OverlayStatus } from '../shared/messages.js';
@@ -359,8 +360,10 @@ ui.save.addEventListener('click', async () => {
     // Azure DevOps is not in `host_permissions`, so the extension cannot reach it until
     // the user grants access. Asking here works because the Save click is a user gesture,
     // which `permissions.request` requires; asking from the background would be rejected.
+    // Artifact downloads land on regional hosts rather than dev.azure.com, so those
+    // origins are requested together — asking for them later, mid-fetch, is not possible.
     if (sources.some((source) => source.kind === 'azure-devops')) {
-      const origins = ['https://dev.azure.com/*'];
+      const origins = AZURE_ORIGINS;
       const granted =
         (await chrome.permissions.contains({ origins })) ||
         (await chrome.permissions.request({ origins }));
