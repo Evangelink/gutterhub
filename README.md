@@ -135,14 +135,33 @@ npm ci
 npm run verify     # typecheck + tests + build
 npm run watch      # rebuild on change
 npm run test       # unit and DOM tests
-npm run e2e        # load the built extension in Chromium against live GitHub
+npm run e2e        # offline gate + live canary, Chromium, against the built extension
+npm run e2e:offline # deterministic gate only: saved GitHub markup, no network
+npm run e2e:live   # live canary only: real github.com
 npm run package    # store-ready zips in artifacts/
 ```
 
-`npm run e2e` is the check that matters most. It loads `dist/chrome` into a real browser,
-seeds a report, opens a live GitHub page and asserts that the markers land where they
-should. It is what caught the modern code view annotating every line twice. Point it at a
-diff as well with `GUTTERHUB_E2E_PR=<pull request files url> npm run e2e`.
+The end-to-end suite loads `dist/chrome` into a real Chromium through
+[`@playwright/test`](https://playwright.dev) and comes in two halves:
+
+- **`npm run e2e:offline`** is the deterministic PR gate. It serves saved, representative
+  GitHub markup from memory and blocks all real network, so it never touches github.com and
+  never flakes on GitHub changing its markup. It covers the marks, the two-report overlay,
+  the diff column handling, and the popup and options pages.
+- **`npm run e2e:live`** is the canary. It drives real github.com and is the only check that
+  the adapters still match GitHub's _current_ markup — it is what caught the modern code
+  view annotating every line twice. Point it at a diff with
+  `GUTTERHUB_E2E_PR=<pull request files url> npm run e2e:live`.
+
+`npm run e2e` runs both, so the scheduled canary stays real. Pick the browser build with
+`GUTTERHUB_E2E_CHANNEL=msedge` (or `chrome`); it defaults to Playwright's Chromium. Traces,
+videos and the HTML report (`npm run e2e:report`) land under `artifacts/` on failure.
+
+**Firefox is checked by hand, not in this suite.** Playwright can load an unpacked extension
+only into Chromium, so there is no supported way here to install `dist/firefox` and reach
+its background event page. Load it through `about:debugging#/runtime/this-firefox` →
+_Load Temporary Add-on_ → `dist/firefox/manifest.json` to verify it manually; the shared
+parsing, path-matching and adapter logic is covered by the unit tests either way.
 
 Icons are generated, not committed as opaque binaries: `node scripts/generate-icons.mjs`.
 
