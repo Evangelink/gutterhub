@@ -15,6 +15,7 @@ function settings(...configs: RepositoryConfig[]): GlobalSettings {
     highlightLines: true,
     showPartial: true,
     githubToken: '',
+    azureToken: '',
     enterpriseHosts: [],
     repositories: Object.fromEntries(configs.map((config) => [config.key.toLowerCase(), config])),
   };
