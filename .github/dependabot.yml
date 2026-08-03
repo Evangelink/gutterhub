@@ -1,0 +1,46 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Europe/Paris
+    open-pull-requests-limit: 2
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # esbuild major releases can require build-script and bundling changes.
+      - dependency-name: esbuild
+        update-types:
+          - version-update:semver-major
+      # TypeScript major releases can introduce new type-checking errors.
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
+      # Vitest major releases can require test configuration and API migrations.
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '10:00'
+      timezone: Europe/Paris
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: deps
