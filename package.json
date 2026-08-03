@@ -1,0 +1,36 @@
+{
+  "name": "gutterhub",
+  "version": "0.1.0",
+  "description": "Browser extension that overlays line-by-line code coverage onto GitHub.",
+  "license": "MIT",
+  "author": "Amaury Levé",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Evangelink/gutterhub.git"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:chrome": "node scripts/build.mjs --target=chrome",
+    "build:firefox": "node scripts/build.mjs --target=firefox",
+    "watch": "node scripts/build.mjs --watch",
+    "package": "node scripts/package.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.2",
+    "esbuild": "^0.28.1",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

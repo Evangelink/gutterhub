@@ -1,0 +1,8 @@
+node_modules/
+dist/
+artifacts/
+*.zip
+.DS_Store
+*.log
+.vscode/
+coverage/
