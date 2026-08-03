@@ -45,9 +45,23 @@
         <label for="source-kind">First report</label>
         <select id="source-kind">
           <option value="github-actions">GitHub Actions artifact</option>
+          <option value="azure-devops">Azure DevOps artifact</option>
           <option value="url-template">URL</option>
           <option value="manual">Uploaded by hand</option>
         </select>
+      </div>
+
+      <div class="field" id="field-azure" hidden>
+        <label for="azure-org">Azure DevOps organisation</label>
+        <input id="azure-org" type="text" placeholder="my-org" />
+        <label for="azure-project" style="margin-top: 8px">Project</label>
+        <input id="azure-project" type="text" placeholder="my-project" />
+        <label for="azure-artifact" style="margin-top: 8px">Artifact name</label>
+        <input id="azure-artifact" type="text" placeholder="coverage*" />
+        <p class="hint">
+          For repositories hosted on GitHub that build in Azure Pipelines. Needs an Azure DevOps
+          token — <em>not</em> the GitHub one — in <a href="#" id="open-options-azure">options</a>.
+        </p>
       </div>
 
       <div class="field" id="field-artifact">

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { CoverageResolutionError, globMatch } from '../src/providers/types.js';
 import { expandTemplate } from '../src/providers/urlTemplate.js';
-import { chooseArtifact, readArchive } from '../src/providers/githubActions.js';
+import { chooseArtifact } from '../src/providers/githubActions.js';
+import { readArchive } from '../src/providers/archive.js';
 import type { WorkflowArtifact } from '../src/providers/githubApi.js';
 
 const LCOV = 'SF:src/a.ts\nDA:1,1\nend_of_record\n';
@@ -184,10 +185,10 @@ describe('readArchive', () => {
     expect(error.hint).toContain('lcov.info');
   });
 
-  it('rejects an archive with no coverage report', () => {
+  it('rejects an archive with no report in it', () => {
     const zip = zipSync({ 'build.log': strToU8('nothing useful') });
 
-    expect(() => readArchive(zip, undefined)).toThrow(/No recognisable coverage report/);
+    expect(() => readArchive(zip, undefined)).toThrow(/No recognisable report/);
   });
 
   it('rejects an empty archive', () => {

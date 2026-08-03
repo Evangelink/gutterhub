@@ -73,16 +73,37 @@ with and the other is not can never read as fine at a glance.
 
 ## Where the reports come from
 
-Pick one per repository:
+Pick one per repository — or two, to overlay both:
 
 1. **GitHub Actions artifact** — GutterHub finds the workflow run for the commit you are
    looking at, downloads the matching artifact and reads the report out of it. Needs a
-   token, because artifact downloads are authenticated even for public repositories.
-2. **URL** — any reachable URL, built from a template:
+   GitHub token, because artifact downloads are authenticated even for public repositories.
+2. **Azure DevOps artifact** — for repositories that live on GitHub but build in Azure
+   Pipelines. GutterHub finds the build whose commit matches the page, then reads the
+   report out of its published artifact. Needs an **Azure DevOps** token with
+   _Build (read)_ scope, which is a different credential from the GitHub one.
+3. **URL** — any reachable URL, built from a template:
    `https://ci.example.com/{owner}/{repo}/{sha}/lcov.info`.
    Placeholders: `{owner}` `{repo}` `{sha}` `{shortSha}` `{ref}` `{branch}` `{pr}` `{host}` `{path}`.
-3. **Uploaded by hand** — paste or drop a report into the popup. Good for trying it out, for
+   Sent without credentials, so the URL has to be reachable anonymously.
+4. **Uploaded by hand** — paste or drop a report into the popup. Good for trying it out, for
    looking at coverage before you push, and for CI systems with nothing publicly reachable.
+
+Sources are configured **per repository, in the popup** — open a repository, pull request
+or file on GitHub and click the toolbar icon. Each repository is remembered separately, so
+every project can point at wherever its own CI publishes. The options page holds the
+settings that are shared across all of them: your tokens, and how the overlay looks.
+
+### Which token do I need?
+
+| Source                  | Token                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| GitHub Actions artifact | GitHub PAT — classic `repo`, or fine-grained _Actions: read_ + _Contents: read_ |
+| Azure DevOps artifact   | **Azure DevOps** PAT with _Build (read)_ — not a GitHub one                     |
+| URL                     | none; the request is sent without credentials                                   |
+| Uploaded by hand        | none                                                                            |
+
+The two tokens are stored separately and neither is ever sent to the other service.
 
 ## Install
 

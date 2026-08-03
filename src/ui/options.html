@@ -58,11 +58,28 @@
       </div>
     </div>
 
+    <h2>Azure DevOps access</h2>
+    <div class="card">
+      <div class="field">
+        <label for="azure-token">Personal access token</label>
+        <input id="azure-token" type="password" placeholder="Azure DevOps PAT" autocomplete="off" />
+        <p class="hint">
+          Only needed for the <strong>Azure DevOps</strong> report source — for repositories that
+          live on GitHub but build in Azure Pipelines. Needs <strong>Build (read)</strong> scope.
+          This is a <em>different</em> credential from the GitHub token above; neither is ever sent
+          to the other service.
+        </p>
+      </div>
+    </div>
+
     <h2>Repositories</h2>
     <div class="card">
       <div class="repo-list" id="repo-list"></div>
       <p class="hint" id="repo-empty">
-        Nothing configured yet. Open a repository on GitHub and use the GutterHub popup.
+        Nothing configured yet. <strong>Report sources are set up in the popup, not here</strong> —
+        open a repository, pull request or file on GitHub, click the GutterHub toolbar icon, and
+        choose where its reports come from. Each repository is remembered separately, so you can
+        point every project at wherever its own CI publishes.
       </p>
     </div>
 

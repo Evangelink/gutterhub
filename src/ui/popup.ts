@@ -42,6 +42,11 @@ const ui = {
   fieldEntry: element('field-entry'),
   fieldTemplate: element('field-template'),
   fieldManual: element('field-manual'),
+  fieldAzure: element('field-azure'),
+  azureOrg: element<HTMLInputElement>('azure-org'),
+  azureProject: element<HTMLInputElement>('azure-project'),
+  azureArtifact: element<HTMLInputElement>('azure-artifact'),
+  openOptionsAzure: element<HTMLAnchorElement>('open-options-azure'),
   conflicts: element('conflicts'),
   warnings: element('warnings'),
   secondEnabled: element<HTMLInputElement>('second-enabled'),
@@ -132,6 +137,7 @@ function applyKind(kind: CoverageSource['kind']): void {
   ui.fieldEntry.hidden = kind !== 'github-actions';
   ui.fieldTemplate.hidden = kind !== 'url-template';
   ui.fieldManual.hidden = kind !== 'manual';
+  ui.fieldAzure.hidden = kind !== 'azure-devops';
 }
 
 function applySecondKind(kind: CoverageSource['kind']): void {
@@ -175,6 +181,13 @@ function readSource(): CoverageSource {
       return { kind: 'url-template', template: ui.urlTemplate.value.trim() };
     case 'manual':
       return { kind: 'manual' };
+    case 'azure-devops':
+      return {
+        kind: 'azure-devops',
+        organisation: ui.azureOrg.value.trim(),
+        project: ui.azureProject.value.trim(),
+        artifactName: ui.azureArtifact.value.trim() || 'coverage*',
+      };
     default: {
       const entryName = ui.entryName.value.trim();
       return {
@@ -195,6 +208,10 @@ function writeSource(source: CoverageSource): void {
     ui.entryName.value = source.entryName ?? '';
   } else if (source.kind === 'url-template') {
     ui.urlTemplate.value = source.template;
+  } else if (source.kind === 'azure-devops') {
+    ui.azureOrg.value = source.organisation;
+    ui.azureProject.value = source.project;
+    ui.azureArtifact.value = source.artifactName;
   }
 }
 
@@ -352,7 +369,7 @@ ui.refresh.addEventListener('click', async () => {
   setTimeout(refreshStatus, 600);
 });
 
-for (const link of [ui.openOptions, ui.openOptionsInline]) {
+for (const link of [ui.openOptions, ui.openOptionsInline, ui.openOptionsAzure]) {
   link.addEventListener('click', (event) => {
     event.preventDefault();
     chrome.runtime.openOptionsPage();

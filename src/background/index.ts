@@ -151,6 +151,7 @@ async function handleResolve(request: ResolveCoverageRequest): Promise<ResolveCo
           context: request.context,
           sha,
           token: settings.githubToken,
+          azureToken: settings.azureToken,
           ...(branch ? { branch } : {}),
         });
 

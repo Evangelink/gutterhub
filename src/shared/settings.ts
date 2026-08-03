@@ -30,7 +30,21 @@ export interface ManualSource {
   slot?: string;
 }
 
-export type CoverageSource = UrlTemplateSource | GitHubActionsSource | ManualSource;
+export interface AzureDevOpsSource {
+  kind: 'azure-devops';
+  /** The organisation in `https://dev.azure.com/{organisation}`. */
+  organisation: string;
+  project: string;
+  /** Glob-ish artifact name; `*` matches any run of characters. */
+  artifactName: string;
+  /** Optional file name inside the artifact archive. Empty means "first parseable file". */
+  entryName?: string;
+  /** Restrict the search to one pipeline, by numeric definition id. */
+  definitionId?: string;
+}
+
+export type CoverageSource =
+  UrlTemplateSource | GitHubActionsSource | ManualSource | AzureDevOpsSource;
 
 export interface RepositoryConfig {
   /** `owner/repo`, lower-cased. */
@@ -60,6 +74,12 @@ export interface GlobalSettings {
   showPartial: boolean;
   /** GitHub token used for the Actions artifact source and private repositories. */
   githubToken: string;
+  /**
+   * Azure DevOps token, used only by the Azure DevOps source. Deliberately separate from
+   * the GitHub one: they are different credentials for different services, and sending
+   * either to the other would be both broken and a leak.
+   */
+  azureToken: string;
   /** Additional GitHub Enterprise hosts to run on. */
   enterpriseHosts: string[];
   repositories: Record<string, RepositoryConfig>;
@@ -70,6 +90,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
   highlightLines: true,
   showPartial: true,
   githubToken: '',
+  azureToken: '',
   enterpriseHosts: [],
   repositories: {},
 };
