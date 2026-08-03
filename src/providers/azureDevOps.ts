@@ -47,10 +47,22 @@ function authHeaders(token: string): Record<string, string> {
   };
 }
 
+/**
+ * Rejects a response that did not carry usable JSON.
+ *
+ * The 203 check is not redundant with `response.ok`: fetch defines `ok` as any 2xx, and
+ * Azure DevOps answers an unauthenticated API call with **203 and an HTML sign-in page**
+ * rather than a 401. Relying on `ok` alone therefore sails straight past the auth failure
+ * and tries to parse that page as JSON.
+ */
+function ensureOk(response: Response, what: string): void {
+  if (response.status === 203 || !response.ok) {
+    describeFailure(response.status, what);
+  }
+}
+
 function describeFailure(status: number, what: string): never {
   if (status === 401 || status === 203) {
-    // Azure DevOps answers an unauthenticated API call with a sign-in page and a
-    // surprising 203, rather than a 401, which is otherwise baffling to diagnose.
     throw new CoverageResolutionError(
       `Not authorised while ${what}.`,
       'Add an Azure DevOps personal access token with Build (read) scope in GutterHub options.',
@@ -78,25 +90,27 @@ async function getJson<T>(url: string, token: string, what: string): Promise<T> 
     );
   }
 
-  if (!response.ok) {
-    describeFailure(response.status, what);
-  }
+  ensureOk(response, what);
 
   return (await response.json()) as T;
 }
 
 /**
- * Finds the build that ran against a commit.
+ * Finds the builds that ran against a commit, best first.
  *
  * The Azure DevOps builds API has no `sourceVersion` filter, so the only way to do this
  * is to list recent builds for the repository and match client-side. Filtering by
  * repository first keeps that list short even on a busy organisation.
+ *
+ * Every match is returned rather than just the newest: several pipelines can build one
+ * commit, and only some of them publish coverage. Picking the most recent alone would
+ * report "no artifact" whenever an unrelated pipeline happened to finish last.
  */
-async function findBuild(
+async function findBuilds(
   source: Extract<CoverageSource, { kind: 'azure-devops' }>,
   request: ResolveRequest,
   token: string,
-): Promise<AzureBuild> {
+): Promise<AzureBuild[]> {
   const { context, sha } = request;
   const base = `https://dev.azure.com/${encodeURIComponent(source.organisation)}/${encodeURIComponent(source.project)}/_apis/build/builds`;
 
@@ -137,7 +151,7 @@ async function findBuild(
       return a.status === 'completed' ? -1 : 1;
     }
     return b.id - a.id;
-  })[0]!;
+  });
 }
 
 function chooseArtifact(
@@ -176,53 +190,67 @@ export const azureDevOpsProvider: CoverageProvider = {
       );
     }
 
-    const build = await findBuild(source, request, token);
+    const builds = await findBuilds(source, request, token);
+    const problems: string[] = [];
 
-    const artifactsUrl =
-      `https://dev.azure.com/${encodeURIComponent(source.organisation)}` +
-      `/${encodeURIComponent(source.project)}/_apis/build/builds/${build.id}` +
-      `/artifacts?api-version=${API_VERSION}`;
+    // Walk the matching builds until one yields an artifact. Several pipelines can build
+    // the same commit and only some publish coverage, so stopping at the first build
+    // would report a false failure whenever an unrelated one finished most recently.
+    for (const build of builds) {
+      const artifactsUrl =
+        `https://dev.azure.com/${encodeURIComponent(source.organisation)}` +
+        `/${encodeURIComponent(source.project)}/_apis/build/builds/${build.id}` +
+        `/artifacts?api-version=${API_VERSION}`;
 
-    const artifacts = await getJson<{ value?: AzureArtifact[] }>(
-      artifactsUrl,
-      token,
-      `listing artifacts for build ${build.buildNumber}`,
+      const artifacts = await getJson<{ value?: AzureArtifact[] }>(
+        artifactsUrl,
+        token,
+        `listing artifacts for build ${build.buildNumber}`,
+      );
+
+      const available = artifacts.value ?? [];
+      const artifact = chooseArtifact(available, source.artifactName);
+
+      if (!artifact) {
+        if (available.length > 0) {
+          problems.push(`${build.buildNumber}: ${available.map((item) => item.name).join(', ')}`);
+        }
+        continue;
+      }
+
+      let archive: Response;
+      try {
+        archive = await fetch(artifact.resource!.downloadUrl!, {
+          headers: authHeaders(token),
+          credentials: 'omit',
+        });
+      } catch (error) {
+        throw new CoverageResolutionError(
+          `Could not download artifact "${artifact.name}".`,
+          error instanceof Error ? error.message : undefined,
+        );
+      }
+
+      // The download is subject to the same 203 sign-in response as the API, and handing
+      // an HTML page to the unzipper would report a corrupt archive instead of the real
+      // authentication problem.
+      ensureOk(archive, `downloading artifact "${artifact.name}"`);
+
+      const entry = readArchive(new Uint8Array(await archive.arrayBuffer()), source.entryName);
+
+      return {
+        text: entry.text,
+        label: `${build.definition?.name ?? 'Azure Pipelines'} #${build.buildNumber} › ${artifact.name} › ${entry.name}`,
+        fileName: entry.name,
+      };
+    }
+
+    throw new CoverageResolutionError(
+      `No artifact matching "${source.artifactName}" on any build for commit ${request.sha.slice(0, 7)}.`,
+      problems.length > 0
+        ? `Artifacts found: ${problems.join(' | ')}`
+        : 'Those builds published no artifacts.',
     );
-
-    const artifact = chooseArtifact(artifacts.value ?? [], source.artifactName);
-    if (!artifact) {
-      throw new CoverageResolutionError(
-        `No artifact matching "${source.artifactName}" on build ${build.buildNumber}.`,
-        (artifacts.value ?? []).length > 0
-          ? `Artifacts on that build: ${(artifacts.value ?? []).map((item) => item.name).join(', ')}`
-          : 'That build published no artifacts.',
-      );
-    }
-
-    let archive: Response;
-    try {
-      archive = await fetch(artifact.resource!.downloadUrl!, {
-        headers: authHeaders(token),
-        credentials: 'omit',
-      });
-    } catch (error) {
-      throw new CoverageResolutionError(
-        `Could not download artifact "${artifact.name}".`,
-        error instanceof Error ? error.message : undefined,
-      );
-    }
-
-    if (!archive.ok) {
-      describeFailure(archive.status, `downloading artifact "${artifact.name}"`);
-    }
-
-    const entry = readArchive(new Uint8Array(await archive.arrayBuffer()), source.entryName);
-
-    return {
-      text: entry.text,
-      label: `${build.definition?.name ?? 'Azure Pipelines'} #${build.buildNumber} › ${artifact.name} › ${entry.name}`,
-      fileName: entry.name,
-    };
   },
 };
 

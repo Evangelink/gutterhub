@@ -110,8 +110,18 @@
           <select id="second-kind">
             <option value="manual">Uploaded by hand</option>
             <option value="github-actions">GitHub Actions artifact</option>
+            <option value="azure-devops">Azure DevOps artifact</option>
             <option value="url-template">URL</option>
           </select>
+
+          <div class="field" id="second-field-azure" hidden style="margin-top: 8px">
+            <label for="second-azure-org">Azure DevOps organisation</label>
+            <input id="second-azure-org" type="text" placeholder="my-org" />
+            <label for="second-azure-project" style="margin-top: 8px">Project</label>
+            <input id="second-azure-project" type="text" placeholder="my-project" />
+            <label for="second-azure-artifact" style="margin-top: 8px">Artifact name</label>
+            <input id="second-azure-artifact" type="text" placeholder="mutation*" />
+          </div>
 
           <div class="field" id="second-field-artifact" hidden style="margin-top: 8px">
             <label for="second-artifact-name">Artifact name</label>

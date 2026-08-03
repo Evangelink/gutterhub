@@ -176,6 +176,61 @@ describe('readArchive', () => {
     expect(readArchive(zip, undefined).text).toBe(LCOV);
   });
 
+  it('finds a mutation report, not just coverage formats', () => {
+    // The shared reader is used by every artifact-based provider, so a mutation report
+    // sitting in an artifact must be recognised rather than silently skipped.
+    const mutation = JSON.stringify({
+      schemaVersion: '2.0',
+      thresholds: { high: 80, low: 60 },
+      files: {
+        'src/a.ts': {
+          language: 'typescript',
+          source: '//',
+          mutants: [
+            {
+              id: '1',
+              mutatorName: 'ConditionalExpression',
+              status: 'Survived',
+              location: { start: { line: 1, column: 1 }, end: { line: 1, column: 9 } },
+            },
+          ],
+        },
+      },
+    });
+
+    const zip = zipSync({
+      'build.log': strToU8('noise'),
+      'mutation-report.json': strToU8(mutation),
+    });
+
+    expect(readArchive(zip, undefined).name).toBe('mutation-report.json');
+  });
+
+  it('finds a mutation report even when the file name says nothing', () => {
+    const mutation = JSON.stringify({
+      schemaVersion: '2.0',
+      thresholds: {},
+      files: {
+        'a.ts': {
+          language: 'ts',
+          source: '//',
+          mutants: [
+            {
+              id: '1',
+              mutatorName: 'X',
+              status: 'Killed',
+              location: { start: { line: 2, column: 1 }, end: { line: 2, column: 4 } },
+            },
+          ],
+        },
+      },
+    });
+
+    const zip = zipSync({ 'results.dat': strToU8(mutation) });
+
+    expect(readArchive(zip, undefined).name).toBe('results.dat');
+  });
+
   it('reports what the archive held when the requested entry is absent', () => {
     const zip = zipSync({ 'lcov.info': strToU8(LCOV) });
 

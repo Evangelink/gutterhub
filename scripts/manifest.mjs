@@ -44,10 +44,12 @@ export function buildManifest({ version, target }) {
     icons,
     permissions: ['storage'],
     host_permissions: ['https://github.com/*', 'https://api.github.com/*'],
-    // Coverage can be hosted anywhere, and GitHub Enterprise lives on private hosts.
-    // Requesting those up front would make the extension look far more invasive than it
-    // is, so they are asked for only when a user configures them.
-    optional_host_permissions: ['https://*/*', 'http://*/*'],
+    // Coverage can be hosted anywhere, Azure DevOps is its own host, and GitHub
+    // Enterprise lives on private hosts. Requesting those up front would make the
+    // extension look far more invasive than it is, so they are asked for only when a
+    // user configures them. `dev.azure.com` is listed explicitly as well as being
+    // covered by the wildcard, so the prompt a user sees names the actual service.
+    optional_host_permissions: ['https://dev.azure.com/*', 'https://*/*', 'http://*/*'],
     content_scripts: [
       {
         matches: ['https://github.com/*'],

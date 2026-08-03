@@ -52,34 +52,45 @@ function artifact(name: string) {
   };
 }
 
-/** Routes each request by URL so a test can describe a whole conversation at once. */
+/**
+ * Routes each request by URL so a test can describe a whole conversation at once.
+ *
+ * `ok` is derived from the status exactly as fetch defines it — any 2xx — rather than
+ * "is it 200". Getting that wrong is what let a 203 sign-in response look like a failure
+ * in tests while sailing straight through in the browser.
+ */
 function mockFetch(routes: {
   builds?: unknown;
   artifacts?: unknown;
   zip?: Uint8Array;
   status?: number;
+  html?: string;
 }) {
   const calls: { url: string; headers: Record<string, string> }[] = [];
+  const status = routes.status ?? 200;
+  const ok = status >= 200 && status < 300;
 
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
 
-      if (routes.status && routes.status !== 200) {
-        return { ok: false, status: routes.status } as Response;
-      }
-      if (url.includes('/artifacts?')) {
-        return { ok: true, status: 200, json: async () => routes.artifacts } as Response;
-      }
-      if (url.includes('/build/builds?')) {
-        return { ok: true, status: 200, json: async () => routes.builds } as Response;
-      }
       return {
-        ok: true,
-        status: 200,
-        arrayBuffer: async () => (routes.zip ?? new Uint8Array()).buffer,
-      } as Response;
+        ok,
+        status,
+        // An Azure DevOps sign-in page is HTML, so parsing it as JSON throws — exactly
+        // what production hits if a 203 is mistaken for success.
+        json: async () => {
+          if (routes.html !== undefined) {
+            throw new SyntaxError('Unexpected token < in JSON');
+          }
+          return url.includes('/artifacts?') ? routes.artifacts : routes.builds;
+        },
+        arrayBuffer: async () =>
+          routes.html !== undefined
+            ? strToU8(routes.html).buffer
+            : (routes.zip ?? new Uint8Array()).buffer,
+      } as unknown as Response;
     }),
   );
 
@@ -237,14 +248,79 @@ describe('azureDevOpsProvider', () => {
   });
 
   it('treats a 203 as an auth failure, which is what Azure DevOps actually returns', async () => {
-    // An unauthenticated Azure DevOps API call answers with a sign-in page and HTTP 203,
-    // not a 401, which is otherwise a baffling thing to debug.
-    mockFetch({ status: 203 });
+    // Fetch defines *any* 2xx as `ok`, and an unauthenticated Azure DevOps call answers
+    // 203 with an HTML sign-in page rather than 401. Relying on `ok` alone sails past the
+    // auth failure and then throws a JSON parse error, which tells the user nothing.
+    mockFetch({ status: 203, html: '<html>Sign in to Azure DevOps</html>' });
+
+    const error = await failure(SOURCE, request());
+
+    expect(error).toBeInstanceOf(CoverageResolutionError);
+    expect(error.message).toMatch(/Not authorised/);
+    expect(error.hint).toMatch(/Build \(read\)/);
+  });
+
+  it('treats a 203 on the artifact download as an auth failure too', async () => {
+    // The download path is a separate fetch and needs the same guard; without it the
+    // sign-in page reaches the unzipper and is reported as a corrupt archive.
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        const isApi = url.includes('/_apis/');
+        return {
+          ok: true,
+          status: isApi ? 200 : 203,
+          json: async () =>
+            url.includes('/artifacts?') ? { value: [artifact('coverage')] } : { value: [build()] },
+          arrayBuffer: async () => strToU8('<html>Sign in</html>').buffer,
+        } as unknown as Response;
+      }),
+    );
 
     const error = await failure(SOURCE, request());
 
     expect(error.message).toMatch(/Not authorised/);
-    expect(error.hint).toMatch(/Build \(read\)/);
+    expect(error.message).not.toMatch(/could not be read/i);
+  });
+
+  it('tries the next matching build when the newest has no usable artifact', async () => {
+    // Several pipelines can build one commit and only some publish coverage. Stopping at
+    // the most recent would report a false failure whenever an unrelated one finished last.
+    let artifactCall = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/artifacts?')) {
+          artifactCall++;
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              value: artifactCall === 1 ? [artifact('logs')] : [artifact('coverage')],
+            }),
+          } as unknown as Response;
+        }
+        if (url.includes('/build/builds?')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ value: [build({ id: 20 }), build({ id: 10 })] }),
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => zipSync({ 'lcov.info': strToU8(LCOV) }).buffer,
+        } as unknown as Response;
+      }),
+    );
+
+    const resolved = await azureDevOpsProvider.resolve(SOURCE, request());
+
+    expect(artifactCall).toBe(2);
+    expect(resolved.text).toBe(LCOV);
   });
 
   it('rejects a source meant for another provider', async () => {

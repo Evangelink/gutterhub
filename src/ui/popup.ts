@@ -60,6 +60,10 @@ const ui = {
   secondFieldArtifact: element('second-field-artifact'),
   secondFieldTemplate: element('second-field-template'),
   secondFieldManual: element('second-field-manual'),
+  secondFieldAzure: element('second-field-azure'),
+  secondAzureOrg: element<HTMLInputElement>('second-azure-org'),
+  secondAzureProject: element<HTMLInputElement>('second-azure-project'),
+  secondAzureArtifact: element<HTMLInputElement>('second-azure-artifact'),
   save: element<HTMLButtonElement>('save'),
   refresh: element<HTMLButtonElement>('refresh'),
   enabled: element<HTMLInputElement>('repo-enabled'),
@@ -144,6 +148,7 @@ function applySecondKind(kind: CoverageSource['kind']): void {
   ui.secondFieldArtifact.hidden = kind !== 'github-actions';
   ui.secondFieldTemplate.hidden = kind !== 'url-template';
   ui.secondFieldManual.hidden = kind !== 'manual';
+  ui.secondFieldAzure.hidden = kind !== 'azure-devops';
 }
 
 function readSecondSource(): CoverageSource {
@@ -154,6 +159,13 @@ function readSecondSource(): CoverageSource {
       return {
         kind: 'github-actions',
         artifactName: ui.secondArtifactName.value.trim() || 'mutation*',
+      };
+    case 'azure-devops':
+      return {
+        kind: 'azure-devops',
+        organisation: ui.secondAzureOrg.value.trim(),
+        project: ui.secondAzureProject.value.trim(),
+        artifactName: ui.secondAzureArtifact.value.trim() || 'mutation*',
       };
     default:
       return { kind: 'manual', slot: SECOND_SLOT };
@@ -172,6 +184,10 @@ function writeSecondSource(source: CoverageSource | undefined): void {
     ui.secondArtifactName.value = source.artifactName;
   } else if (source?.kind === 'url-template') {
     ui.secondUrlTemplate.value = source.template;
+  } else if (source?.kind === 'azure-devops') {
+    ui.secondAzureOrg.value = source.organisation;
+    ui.secondAzureProject.value = source.project;
+    ui.secondAzureArtifact.value = source.artifactName;
   }
 }
 
@@ -339,6 +355,23 @@ ui.save.addEventListener('click', async () => {
     const settings = await loadSettings();
     const key = `${owner}/${repo}`;
     const existing = repositoryConfig(settings, key);
+
+    // Azure DevOps is not in `host_permissions`, so the extension cannot reach it until
+    // the user grants access. Asking here works because the Save click is a user gesture,
+    // which `permissions.request` requires; asking from the background would be rejected.
+    if (sources.some((source) => source.kind === 'azure-devops')) {
+      const origins = ['https://dev.azure.com/*'];
+      const granted =
+        (await chrome.permissions.contains({ origins })) ||
+        (await chrome.permissions.request({ origins }));
+
+      if (!granted) {
+        ui.hint.textContent =
+          'Azure DevOps access was declined, so those reports cannot be fetched. ' +
+          'Press Save again to be asked once more.';
+        return;
+      }
+    }
 
     const config: RepositoryConfig = {
       key,
