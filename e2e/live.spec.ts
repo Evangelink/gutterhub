@@ -17,8 +17,12 @@ import { coverageReport, mutationReport } from './fixtures/reports.js';
 const FILE_PATH = 'src/core/model.ts';
 const BLOB_URL = `https://github.com/${REPOSITORY}/blob/main/${FILE_PATH}`;
 // A closed PR remains a stable live diff fixture without requiring a branch to be kept alive.
+//
+// The fallback is deliberately truthiness-based rather than `??`. A workflow that passes
+// `GUTTERHUB_E2E_PR: ${{ inputs.pull_request_url }}` supplies an **empty string** on a
+// schedule trigger, not undefined, and `??` would happily accept that and try to open it.
 const PR_URL =
-  process.env['GUTTERHUB_E2E_PR'] ?? 'https://github.com/Evangelink/gutterhub/pull/1/files';
+  process.env['GUTTERHUB_E2E_PR']?.trim() || 'https://github.com/Evangelink/gutterhub/pull/1/files';
 
 const coverage = () => coverageReport({ path: FILE_PATH });
 const mutation = () => mutationReport({ path: FILE_PATH });

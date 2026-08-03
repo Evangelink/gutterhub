@@ -217,6 +217,11 @@ treats that as a design constraint rather than an accident:
   which selectors match, how many elements carry `data-line-number`, and whether any
   path attribute is present. Start there when the overlay stops appearing.
 
+## Privacy
+
+GutterHub collects nothing. No analytics, no telemetry, no backend. Your token and any
+report you upload stay in your browser. See [PRIVACY.md](PRIVACY.md).
+
 ## Licence
 
 [MIT](LICENSE)
