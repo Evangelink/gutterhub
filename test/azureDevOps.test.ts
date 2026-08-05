@@ -160,6 +160,22 @@ describe('azureDevOpsProvider', () => {
     expect(calls[0]!.headers['Authorization']).toBe(`Basic ${btoa(':azdo-token')}`);
   });
 
+  it('reads public projects anonymously when no Azure DevOps token is configured', async () => {
+    const calls = mockFetch({
+      builds: { value: [build()] },
+      artifacts: { value: [artifact('coverage')] },
+      zip: zipSync({ 'lcov.info': strToU8(LCOV) }),
+    });
+
+    await expect(
+      azureDevOpsProvider.resolve(SOURCE, request({ azureToken: '' })),
+    ).resolves.toBeDefined();
+
+    for (const call of calls) {
+      expect(call.headers).not.toHaveProperty('Authorization');
+    }
+  });
+
   it('never sends the GitHub token to Azure DevOps', async () => {
     const calls = mockFetch({
       builds: { value: [build()] },
@@ -251,14 +267,6 @@ describe('azureDevOpsProvider', () => {
     expect(error.hint).toContain('logs');
   });
 
-  it('requires an Azure DevOps token, and says it is not the GitHub one', async () => {
-    const error = await failure(SOURCE, request({ azureToken: '' }));
-
-    expect(error).toBeInstanceOf(CoverageResolutionError);
-    expect(error.message).toMatch(/Azure DevOps token is required/);
-    expect(error.hint).toMatch(/separate from the GitHub token/);
-  });
-
   it('requires an organisation and project', async () => {
     await expect(
       azureDevOpsProvider.resolve({ ...SOURCE, organisation: '' }, request()),
@@ -271,10 +279,11 @@ describe('azureDevOpsProvider', () => {
     // auth failure and then throws a JSON parse error, which tells the user nothing.
     mockFetch({ status: 203, html: '<html>Sign in to Azure DevOps</html>' });
 
-    const error = await failure(SOURCE, request());
+    const error = await failure(SOURCE, request({ azureToken: '' }));
 
     expect(error).toBeInstanceOf(CoverageResolutionError);
     expect(error.message).toMatch(/Not authorised/);
+    expect(error.hint).toMatch(/Public projects need no token/);
     expect(error.hint).toMatch(/Build \(read\)/);
   });
 

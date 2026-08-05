@@ -75,9 +75,9 @@ export interface GlobalSettings {
   /** GitHub token used for the Actions artifact source and private repositories. */
   githubToken: string;
   /**
-   * Azure DevOps token, used only by the Azure DevOps source. Deliberately separate from
-   * the GitHub one: they are different credentials for different services, and sending
-   * either to the other would be both broken and a leak.
+   * Optional Azure DevOps token for private projects, used only by the Azure DevOps source.
+   * Deliberately separate from the GitHub one: they are different credentials for different
+   * services, and sending either to the other would be both broken and a leak.
    */
   azureToken: string;
   /** Additional GitHub Enterprise hosts to run on. */

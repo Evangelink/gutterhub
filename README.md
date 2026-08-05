@@ -80,8 +80,8 @@ Pick one per repository — or two, to overlay both:
    GitHub token, because artifact downloads are authenticated even for public repositories.
 2. **Azure DevOps artifact** — for repositories that live on GitHub but build in Azure
    Pipelines. GutterHub finds the build whose commit matches the page, then reads the
-   report out of its published artifact. Needs an **Azure DevOps** token with
-   _Build (read)_ scope, which is a different credential from the GitHub one.
+   report out of its published artifact. Public Azure DevOps projects need no token;
+   private projects need an **Azure DevOps** token with _Build (read)_ scope.
 3. **URL** — any reachable URL, built from a template:
    `https://ci.example.com/{owner}/{repo}/{sha}/lcov.info`.
    Placeholders: `{owner}` `{repo}` `{sha}` `{shortSha}` `{ref}` `{branch}` `{pr}` `{host}` `{path}`.
@@ -96,12 +96,12 @@ settings that are shared across all of them: your tokens, and how the overlay lo
 
 ### Which token do I need?
 
-| Source                  | Token                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| GitHub Actions artifact | GitHub PAT — classic `repo`, or fine-grained _Actions: read_ + _Contents: read_ |
-| Azure DevOps artifact   | **Azure DevOps** PAT with _Build (read)_ — not a GitHub one                     |
-| URL                     | none; the request is sent without credentials                                   |
-| Uploaded by hand        | none                                                                            |
+| Source                  | Token                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| GitHub Actions artifact | GitHub PAT — classic `repo`, or fine-grained _Actions: read_ + _Contents: read_         |
+| Azure DevOps artifact   | none for public projects; **Azure DevOps** PAT with _Build (read)_ for private projects |
+| URL                     | none; the request is sent without credentials                                           |
+| Uploaded by hand        | none                                                                                    |
 
 The two tokens are stored separately and neither is ever sent to the other service.
 
