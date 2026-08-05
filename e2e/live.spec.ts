@@ -22,7 +22,8 @@ const BLOB_URL = `https://github.com/${REPOSITORY}/blob/main/${FILE_PATH}`;
 // `GUTTERHUB_E2E_PR: ${{ inputs.pull_request_url }}` supplies an **empty string** on a
 // schedule trigger, not undefined, and `??` would happily accept that and try to open it.
 const PR_URL =
-  process.env['GUTTERHUB_E2E_PR']?.trim() || 'https://github.com/Evangelink/gutterhub/pull/1/files';
+  process.env['GUTTERHUB_E2E_PR']?.trim() ||
+  'https://github.com/Evangelink/gutterhub/pull/1/changes';
 
 const coverage = () => coverageReport({ path: FILE_PATH });
 const mutation = () => mutationReport({ path: FILE_PATH });

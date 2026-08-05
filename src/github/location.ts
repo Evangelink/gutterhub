@@ -80,7 +80,7 @@ export function parseLocation(url: string): PageContext | null {
     }
     // Only the "Files changed" tab has a diff to annotate. The conversation and
     // commits tabs are deliberately skipped.
-    if (rest[1] !== 'files') {
+    if (rest[1] !== 'files' && rest[1] !== 'changes') {
       return null;
     }
     return { ...base, kind: 'pull-request-files', pullNumber };

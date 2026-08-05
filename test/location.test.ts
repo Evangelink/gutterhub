@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseLocation, repositoryKey, samePage } from '../src/github/location.js';
 
 describe('parseLocation', () => {
-  it('recognises the pull request files tab', () => {
-    expect(parseLocation('https://github.com/acme/widget/pull/42/files')).toEqual({
+  it.each(['changes', 'files'])('recognises the pull request files tab at /%s', (route) => {
+    expect(parseLocation(`https://github.com/acme/widget/pull/42/${route}`)).toEqual({
       kind: 'pull-request-files',
       host: 'github.com',
       owner: 'acme',
@@ -20,7 +20,7 @@ describe('parseLocation', () => {
   });
 
   it('keeps query strings and fragments out of the context', () => {
-    expect(parseLocation('https://github.com/acme/widget/pull/42/files?diff=split#r1')).toEqual({
+    expect(parseLocation('https://github.com/acme/widget/pull/42/changes?diff=split#r1')).toEqual({
       kind: 'pull-request-files',
       host: 'github.com',
       owner: 'acme',
@@ -91,6 +91,12 @@ describe('samePage', () => {
 
   it('treats identical locations as the same page', () => {
     expect(samePage(pull, parseLocation('https://github.com/acme/widget/pull/42/files'))).toBe(
+      true,
+    );
+  });
+
+  it('treats the files and changes routes as the same page', () => {
+    expect(samePage(pull, parseLocation('https://github.com/acme/widget/pull/42/changes'))).toBe(
       true,
     );
   });
