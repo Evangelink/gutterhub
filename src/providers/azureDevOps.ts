@@ -65,14 +65,15 @@ interface AzureArtifact {
 }
 
 /**
- * Azure DevOps expects a PAT as the *password* of HTTP basic auth with an empty username.
- * `btoa` is available in both the service worker and the page, and a PAT is ASCII.
+ * Public Azure DevOps projects allow anonymous artifact reads. Private projects expect a
+ * PAT as the password of HTTP basic auth with an empty username.
  */
 function authHeaders(token: string): Record<string, string> {
-  return {
-    Accept: 'application/json',
-    Authorization: `Basic ${btoa(`:${token}`)}`,
-  };
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (token) {
+    headers.Authorization = `Basic ${btoa(`:${token}`)}`;
+  }
+  return headers;
 }
 
 /**
@@ -139,7 +140,8 @@ function describeFailure(status: number, what: string): never {
   if (status === 401 || status === 203) {
     throw new CoverageResolutionError(
       `Not authorised while ${what}.`,
-      'Add an Azure DevOps personal access token with Build (read) scope in GutterHub options.',
+      'Public projects need no token. For a private project, add an Azure DevOps personal ' +
+        'access token with Build (read) scope in GutterHub options.',
     );
   }
 
@@ -250,12 +252,6 @@ export const azureDevOpsProvider: CoverageProvider = {
     }
 
     const token = request.azureToken ?? '';
-    if (token.length === 0) {
-      throw new CoverageResolutionError(
-        'An Azure DevOps token is required to download build artifacts.',
-        'Add one with Build (read) scope in GutterHub options. This is separate from the GitHub token.',
-      );
-    }
 
     if (!source.organisation || !source.project) {
       throw new CoverageResolutionError(

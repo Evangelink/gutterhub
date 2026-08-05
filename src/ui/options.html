@@ -64,10 +64,9 @@
         <label for="azure-token">Personal access token</label>
         <input id="azure-token" type="password" placeholder="Azure DevOps PAT" autocomplete="off" />
         <p class="hint">
-          Only needed for the <strong>Azure DevOps</strong> report source — for repositories that
-          live on GitHub but build in Azure Pipelines. Needs <strong>Build (read)</strong> scope.
-          This is a <em>different</em> credential from the GitHub token above; neither is ever sent
-          to the other service.
+          Public Azure DevOps projects need no token. For a private project, use a PAT with
+          <strong>Build (read)</strong> scope. This is a <em>different</em> credential from the
+          GitHub token above; neither is ever sent to the other service.
         </p>
       </div>
     </div>

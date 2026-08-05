@@ -10,7 +10,7 @@ export interface ResolveRequest {
   branch?: string;
   /** GitHub token, for the GitHub-backed sources. */
   token: string;
-  /** Azure DevOps token. A different credential for a different service. */
+  /** Optional Azure DevOps token for private projects. */
   azureToken?: string;
 }
 
