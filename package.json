@@ -40,7 +40,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "esbuild": "^0.28.1",
     "jsdom": "^30.0.0",
-    "playwright": "^1.63.0-alpha-2026-07-27",
+    "playwright": "^1.63.0-alpha-2026-08-03",
     "prettier": "^3.9.6",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
