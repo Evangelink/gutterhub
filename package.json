@@ -34,7 +34,7 @@
     "fflate": "^0.8.2"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0-alpha-2026-07-27",
+    "@playwright/test": "1.63.0-alpha-2026-08-03",
     "@types/chrome": "^0.2.2",
     "@types/jsdom": "^28.0.3",
     "@vitest/coverage-v8": "^4.1.10",
