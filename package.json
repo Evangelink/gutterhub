@@ -35,11 +35,11 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0-alpha-2026-07-27",
-    "@types/chrome": "^0.2.2",
+    "@types/chrome": "^0.2.5",
     "@types/jsdom": "^28.0.3",
     "@vitest/coverage-v8": "^4.1.10",
     "esbuild": "^0.28.1",
-    "jsdom": "^30.0.0",
+    "jsdom": "^30.0.1",
     "playwright": "^1.63.0-alpha-2026-07-27",
     "prettier": "^3.9.6",
     "typescript": "^7.0.2",
